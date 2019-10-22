@@ -27,6 +27,10 @@ def phi(X, M):
             sum = 1
             for k in range(1, M+1):
                 if n < x_num[k]:
+                    print(k)
+                    print(phi_list[n])
+                    if k > len(phi_list[n]):
+                        break
                     sum = sum*feature[m][phi_list[n][k-1]]
             # 第一col是bias不動
             phi_matrix[m, n+1] = sum
