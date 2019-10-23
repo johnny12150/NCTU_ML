@@ -3,9 +3,6 @@ from itertools import combinations_with_replacement
 
 feature = np.genfromtxt('./dataset_X.csv', delimiter=',')[:, 1:]
 label = np.genfromtxt('./dataset_T.csv', delimiter=',')[:, -1]
-m2 = np.load('./m2.npy')
-ww2 = np.load('./w2.npy')  # np 1.15
-w2_16 = np.load('./w2_16.npy')  # np 1.16
 
 
 def phi(X, M):
@@ -30,7 +27,7 @@ def phi(X, M):
             sum = 1
             K = np.sort(np.argwhere(n+1 >= x_num))[-1]+1
             for k in range(K[0]):
-                sum = sum * feature[m][phi_list[n][k - 1]]
+                sum = sum * X[m][phi_list[n][k - 1]]
             # 第一col是bias不動
             phi_matrix[m, n+1] = sum
     return phi_matrix
@@ -59,12 +56,35 @@ def get_close_form(X, Y):
 # M=1 時的close form weight, 取前877筆當train
 w1 = get_close_form(phi(feature[:877], 1), label[:877])
 w2 = get_close_form(phi(feature[:877], 2), label[:877])
-# np.save('w2_16.npy', w2)
-np.save('w2_17.npy', w2)
-print(np.array_equal(w2_16, w2))  # np 1.16跟1.17算起來同
-print(np.array_equal(ww2, w2))  # np 1.15跟1.16算起來不同
 
 
+# 1-a. 算 loss
+def rmse(a, b):
+    return np.sqrt(np.mean(np.square(a - b)))
+
+
+# train的loss
+loss_w1 = rmse(phi(feature[:877], 1).dot(w1), label[:877])  # 3.93130...
+loss_w2 = rmse(np.dot(phi(feature[:877], 2), w2), label[:877])  # 3.10346...
+
+# todo: validation的 loss
+
+
+rmse_combinations = []
+# todo: 1-b. 挑feature
+for i in range(17):
+    tmp = np.delete(feature, i, axis=1)
+    phi_m = phi(tmp[:877], 1)
+    weights = get_close_form(phi_m, label[:877])
+    rmse_tmp = rmse(phi_m.dot(weights), label[:877])
+    rmse_combinations.append(rmse_tmp)
+
+# todo: 2-a. 用選出的feature做polynomial (M>=3)
+
+# todo: 2-b. 測試不同order成效
+
+
+# 3-a.
 def close_form_l2(X, Y, lamda):
     """
     透過close form加上L2 norm算出weight
