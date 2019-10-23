@@ -67,8 +67,11 @@ def rmse(a, b):
 loss_w1 = rmse(phi(feature[:877], 1).dot(w1), label[:877])  # 3.93130...
 loss_w2 = rmse(np.dot(phi(feature[:877], 2), w2), label[:877])  # 3.10346...
 
-# todo: validation的 loss
-
+val_phi1 = phi(feature[877:], 1)
+val_phi2 = phi(feature[877:], 2)
+# validation的 loss
+val_loss_1 = rmse(val_phi1.dot(w1), label[877:])
+val_loss_2 = rmse(val_phi2.dot(w2), label[877:])
 
 rmse_combinations = []
 # todo: 1-b. 挑feature
