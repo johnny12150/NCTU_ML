@@ -1,5 +1,6 @@
 import numpy as np
 from itertools import combinations_with_replacement
+import matplotlib.pyplot as plt
 
 feature = np.genfromtxt('./dataset_X.csv', delimiter=',')[:, 1:]
 label = np.genfromtxt('./dataset_T.csv', delimiter=',')[:, -1]
@@ -60,27 +61,57 @@ w2 = get_close_form(phi(feature[:877], 2), label[:877])
 
 # 1-a. 算 loss
 def rmse(a, b):
+    """
+    :param a: train/ validation
+    :param b: validation/ train
+    :return: rmse計算結果
+    """
     return np.sqrt(np.mean(np.square(a - b)))
 
 
+def plot_loss(train, val, x_range, xtitle='order change'):
+    """
+    畫train跟validation loss的圖
+    :param train: train的RMSE結果
+    :param val: validation的RMSE結果
+    :param x_range: x軸的range
+    :param xtitle: 圖片的x軸名稱
+    """
+    # x_range = range(1, len(train)+1)
+    plt.plot(x_range, train, label='train')
+    plt.plot(x_range, val, label='validation')
+    plt.legend(loc='best')
+    plt.xlabel(xtitle)
+    plt.xticks(x_range)
+    plt.ylabel('RMSE')
+    plt.show()
+    plt.close()
+
+
 # train的loss
-loss_w1 = rmse(phi(feature[:877], 1).dot(w1), label[:877])  # 3.93130...
-loss_w2 = rmse(np.dot(phi(feature[:877], 2), w2), label[:877])  # 3.10346...
+train_loss_w1 = rmse(phi(feature[:877], 1).dot(w1), label[:877])  # 3.93130...
+train_loss_w2 = rmse(np.dot(phi(feature[:877], 2), w2), label[:877])  # 3.10346...
 
 val_phi1 = phi(feature[877:], 1)
 val_phi2 = phi(feature[877:], 2)
 # validation的 loss
-val_loss_1 = rmse(val_phi1.dot(w1), label[877:])
-val_loss_2 = rmse(val_phi2.dot(w2), label[877:])
+val_loss_1 = rmse(val_phi1.dot(w1), label[877:])  # 5.55501
+val_loss_2 = rmse(val_phi2.dot(w2), label[877:])  # 6.86332
 
+plot_loss([train_loss_w1, train_loss_w2], [val_loss_1, val_loss_2], range(1, 3))
+
+rmse_trian = []
 rmse_combinations = []
 # todo: 1-b. 挑feature
 for i in range(17):
     tmp = np.delete(feature, i, axis=1)
     phi_m = phi(tmp[:877], 1)
     weights = get_close_form(phi_m, label[:877])
-    rmse_tmp = rmse(phi_m.dot(weights), label[:877])
-    rmse_combinations.append(rmse_tmp)
+    phi_test = phi(tmp[877:], 1)
+    rmse_trian.append(rmse(phi_m.dot(weights), label[:877]))
+    rmse_combinations.append(rmse(phi_test.dot(weights), label[877:]))
+
+plot_loss(rmse_trian, rmse_combinations, range(len(rmse_trian)), 'Column of feature droped')
 
 # todo: 2-a. 用選出的feature做polynomial (M>=3)
 
@@ -100,5 +131,15 @@ def close_form_l2(X, Y, lamda):
     return tmp.dot(Y)
 
 
-w1_l2 = close_form_l2(phi(feature[:877], 1), label[:877], 0.001)
-w2_l2 = close_form_l2(phi(feature[:877], 2), label[:877], 0.001)
+# 3-b. 測試不同lamda
+lamda_list = [0.001, 0.01, 0.1, 1]
+rmse_w1_l2 = []
+rmse_w2_l2 = []
+for l, lam in enumerate(lamda_list):
+    w1_l2 = close_form_l2(phi(feature[:877], 1), label[:877], lam)
+    w2_l2 = close_form_l2(phi(feature[:877], 2), label[:877], lam)
+    test_phi1 = phi(feature[877:], 1)
+    test_phi2 = phi(feature[877:], 2)
+    rmse_w1_l2.append(rmse(test_phi1.dot(w1_l2), label[877:]))
+    rmse_w2_l2.append(rmse(test_phi2.dot(w2_l2), label[877:]))
+
