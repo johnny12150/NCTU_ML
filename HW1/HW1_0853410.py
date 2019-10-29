@@ -88,36 +88,6 @@ def plot_loss(train, val, x_range, xtitle='order change'):
     plt.close()
 
 
-# train的loss
-train_loss_w1 = rmse(phi(feature[:877], 1).dot(w1), label[:877])  # 3.93130...
-train_loss_w2 = rmse(np.dot(phi(feature[:877], 2), w2), label[:877])  # 3.10346...
-
-val_phi1 = phi(feature[877:], 1)
-val_phi2 = phi(feature[877:], 2)
-# validation的 loss
-val_loss_1 = rmse(val_phi1.dot(w1), label[877:])  # 5.55501
-val_loss_2 = rmse(val_phi2.dot(w2), label[877:])  # 6.86332
-
-plot_loss([train_loss_w1, train_loss_w2], [val_loss_1, val_loss_2], range(1, 3))
-
-rmse_trian = []
-rmse_combinations = []
-# todo: 1-b. 挑feature
-for i in range(17):
-    tmp = np.delete(feature, i, axis=1)
-    phi_m = phi(tmp[:877], 1)
-    weights = get_close_form(phi_m, label[:877])
-    phi_test = phi(tmp[877:], 1)
-    rmse_trian.append(rmse(phi_m.dot(weights), label[:877]))
-    rmse_combinations.append(rmse(phi_test.dot(weights), label[877:]))
-
-plot_loss(rmse_trian, rmse_combinations, range(len(rmse_trian)), 'Column of feature droped')
-
-# todo: 2-a. 用選出的feature做polynomial (M>=3)
-
-# todo: 2-b. 測試不同order成效
-
-
 # 3-a.
 def close_form_l2(X, Y, lamda):
     """
@@ -131,15 +101,81 @@ def close_form_l2(X, Y, lamda):
     return tmp.dot(Y)
 
 
+def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=0):
+    """
+    算出train跟validation的loss
+    :param X_train:
+    :param y_train:
+    :param X_test:
+    :param y_test:
+    :param order: 幾次方
+    :param l2: 設定lambda
+    :param cross: 是否要使用cross_validation
+    :return:
+    """
+
+    # fixme: 加上cross_vali
+    phi_train = phi(X_train, order)
+    phi_test = phi(X_test, order)
+    if l2:
+        w = close_form_l2(phi_train, y_train, l2)
+    else:
+        # 計算weight
+        w = get_close_form(phi_train, y_train)
+
+    # 計算train, validation loss
+    train_l = rmse(phi_train.dot(w), y_train)
+    val_l = rmse(phi_test.dot(w), y_test)
+
+    return w, train_l, val_l
+
+
+# train的loss
+train_loss_w1 = rmse(phi(feature[:877], 1).dot(w1), label[:877])  # 3.93130...
+train_loss_w2 = rmse(np.dot(phi(feature[:877], 2), w2), label[:877])  # 3.10346...
+
+val_phi1 = phi(feature[877:], 1)
+val_phi2 = phi(feature[877:], 2)
+# validation的 loss
+val_loss_1 = rmse(val_phi1.dot(w1), label[877:])  # 5.55501
+val_loss_2 = rmse(val_phi2.dot(w2), label[877:])  # 6.86332
+
+plot_loss([train_loss_w1, train_loss_w2], [val_loss_1, val_loss_2], range(1, 3))
+
+rmse_trian = []
+rmse_val = []
+# 1-b. 挑feature
+for i in range(17):
+    tmp = np.delete(feature, i, axis=1)
+    w, t, v = train_vali(tmp[:877], label[:877], tmp[877:], label[877:], 1)
+    rmse_trian.append(t)
+    rmse_val.append(v)
+
+plot_loss(rmse_trian, rmse_val, range(len(rmse_trian)), 'Column of feature droped')
+
+rmse_trian = []
+rmse_val = []
+# 2-a. 測試不同order成效
+for m in range(10):
+    # 用選出的feature做polynomial
+    w, t, v = train_vali(feature[:877, [2, 8, 13]], label[:877], feature[877:, [2, 8, 13]], label[877:], m)
+    # todo: 2-b. 用 K-fold驗證
+    rmse_trian.append(t)
+    rmse_val.append(v)
+
+plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Different order for polynomial')
+
+
 # 3-b. 測試不同lamda
 lamda_list = [0.001, 0.01, 0.1, 1]
-rmse_w1_l2 = []
-rmse_w2_l2 = []
 for l, lam in enumerate(lamda_list):
-    w1_l2 = close_form_l2(phi(feature[:877], 1), label[:877], lam)
-    w2_l2 = close_form_l2(phi(feature[:877], 2), label[:877], lam)
-    test_phi1 = phi(feature[877:], 1)
-    test_phi2 = phi(feature[877:], 2)
-    rmse_w1_l2.append(rmse(test_phi1.dot(w1_l2), label[877:]))
-    rmse_w2_l2.append(rmse(test_phi2.dot(w2_l2), label[877:]))
+    rmse_trian = []
+    rmse_val = []
+    for m in range(5):
+        w, t, v = train_vali(feature[:877, [2, 8, 13]], label[:877], feature[877:, [2, 8, 13]], label[877:], m, lam)
+        rmse_trian.append(t)
+        rmse_val.append(v)
+
+    # 比較 w1, w2各自的 train, test loss
+    plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Lambda= ' + str(lam) + ' L2 polynomial')
 
