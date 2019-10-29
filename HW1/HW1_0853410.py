@@ -90,6 +90,7 @@ def plot_loss(train, val, x_range, xtitle='order change'):
 
 # 3-a.
 def close_form_l2(X, Y, lamda):
+    # https://xavierbourretsicotte.github.io/intro_ridge.html
     """
     透過close form加上L2 norm算出weight
     :param X: data的feature經過PHI轉換
@@ -97,11 +98,11 @@ def close_form_l2(X, Y, lamda):
     :param lamda: L2的係數
     :return:
     """
-    tmp = np.linalg.inv(X.T.dot(X) + lamda * np.identity(X.shape[1])).dot(X.T)
+    tmp = np.linalg.inv(X.T.dot(X) + lamda * np.eye(X.shape[1])).dot(X.T)
     return tmp.dot(Y)
 
 
-def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=0):
+def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
     """
     算出train跟validation的loss
     :param X_train:
@@ -110,23 +111,38 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=0):
     :param y_test:
     :param order: 幾次方
     :param l2: 設定lambda
-    :param cross: 是否要使用cross_validation
+    :param cross: cross_validation要切幾分
     :return:
     """
 
-    # fixme: 加上cross_vali
-    phi_train = phi(X_train, order)
-    phi_test = phi(X_test, order)
-    if l2:
-        w = close_form_l2(phi_train, y_train, l2)
-    else:
-        # 計算weight
-        w = get_close_form(phi_train, y_train)
+    train_l = 0
+    val_l = 0
+    for i in range(cross):
+        if cross !=1:
+            X = X_train
+            Y = y_train
+            # 手動切train test
+            parts = len(X) / cross
+            idx = range(int(parts * i), int(parts * (i+1)))
+            y_test = Y[idx]
+            y_train = Y[list(set(range(len(Y))) - set(idx))]
+            X_test = X[idx, :]
+            X_train = X[list(set(range(len(Y))) - set(idx)), :]
 
-    # 計算train, validation loss
-    train_l = rmse(phi_train.dot(w), y_train)
-    val_l = rmse(phi_test.dot(w), y_test)
+        phi_train = phi(X_train, order)
+        phi_test = phi(X_test, order)
+        if l2:
+            w = close_form_l2(phi_train, y_train, l2)
+        else:
+            # 計算weight
+            w = get_close_form(phi_train, y_train)
 
+        # 計算train, validation loss
+        train_l += rmse(phi_train.dot(w), y_train)
+        val_l += rmse(phi_test.dot(w), y_test)
+
+    train_l = train_l / cross
+    val_l = val_l / cross
     return w, train_l, val_l
 
 
@@ -156,10 +172,9 @@ plot_loss(rmse_trian, rmse_val, range(len(rmse_trian)), 'Column of feature drope
 rmse_trian = []
 rmse_val = []
 # 2-a. 測試不同order成效
-for m in range(10):
-    # 用選出的feature做polynomial
-    w, t, v = train_vali(feature[:877, [2, 8, 13]], label[:877], feature[877:, [2, 8, 13]], label[877:], m)
-    # todo: 2-b. 用 K-fold驗證
+for m in range(5):
+    # 2-b. 用選出的feature做polynomial, 切4分做cross-validation
+    w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, 0, 4)
     rmse_trian.append(t)
     rmse_val.append(v)
 
@@ -172,7 +187,7 @@ for l, lam in enumerate(lamda_list):
     rmse_trian = []
     rmse_val = []
     for m in range(5):
-        w, t, v = train_vali(feature[:877, [2, 8, 13]], label[:877], feature[877:, [2, 8, 13]], label[877:], m, lam)
+        w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, lam, 4)
         rmse_trian.append(t)
         rmse_val.append(v)
 
