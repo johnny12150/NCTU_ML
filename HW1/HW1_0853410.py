@@ -47,11 +47,8 @@ def get_close_form(X, Y):
     :param Y: data的target/ label
     :return:
     """
-    # first = np.dot(X.T, X)
-    # second = np.dot(X.T, Y)
     
     return np.dot(np.dot(np.linalg.inv(np.dot(X.T, X)), X.T), Y)
-    # return np.dot(np.linalg.inv(first), second)
 
 
 # M=1 時的close form weight, 取前877筆當train
@@ -77,7 +74,7 @@ def plot_loss(train, val, x_range, xtitle='order change'):
     :param x_range: x軸的range
     :param xtitle: 圖片的x軸名稱
     """
-    # x_range = range(1, len(train)+1)
+
     plt.plot(x_range, train, label='train')
     plt.plot(x_range, val, label='validation')
     plt.legend(loc='best')
@@ -117,17 +114,18 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
 
     train_l = 0
     val_l = 0
+    # val_l = []
+    X = X_train.copy()
+    Y = y_train.copy()
     for i in range(cross):
         if cross !=1:
-            X = X_train
-            Y = y_train
             # 手動切train test
             parts = len(X) / cross
             idx = range(int(parts * i), int(parts * (i+1)))
             y_test = Y[idx]
             y_train = Y[list(set(range(len(Y))) - set(idx))]
-            X_test = X[idx, :]
-            X_train = X[list(set(range(len(Y))) - set(idx)), :]
+            X_test = X[idx]
+            X_train = X[list(set(range(len(Y))) - set(idx))]
 
         phi_train = phi(X_train, order)
         phi_test = phi(X_test, order)
@@ -140,6 +138,7 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
         # 計算train, validation loss
         train_l += rmse(phi_train.dot(w), y_train)
         val_l += rmse(phi_test.dot(w), y_test)
+        # val_l.append(rmse(phi_test.dot(w), y_test))
 
     train_l = train_l / cross
     val_l = val_l / cross
@@ -172,13 +171,42 @@ plot_loss(rmse_trian, rmse_val, range(len(rmse_trian)), 'Column of feature drope
 rmse_trian = []
 rmse_val = []
 # 2-a. 測試不同order成效
-for m in range(5):
+for m in range(10):
     # 2-b. 用選出的feature做polynomial, 切4分做cross-validation
-    w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, 0, 4)
+    w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, 0, 8)
     rmse_trian.append(t)
     rmse_val.append(v)
 
 plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Different order for polynomial')
+
+
+# Gaussian basis
+def gaussian_basis_function(x, mu, sigma=0.1):
+    return np.exp(-0.5 * (x - mu) ** 2 / sigma ** 2)
+
+
+def sigmoid_basis(x, mu, sigma=0.1):
+    return 1/ (1 - np.exp((x - mu)/ sigma))
+
+
+# todo: 產生gaussian的phi
+def phi_basis(X, method='gaussian'):
+    phi = np.zeros(X.shape)
+    for i in range(X.shape[1]):
+        if method == 'gaussian':
+            phi[:, i] = gaussian_basis_function(X[:, i], X[:, i].mean())
+        elif method == 'sigmoid':
+            phi[:, i] = sigmoid_basis(X[:, i], X[:, i].mean())
+    return phi
+
+
+p2 = phi_basis(feature)
+wg2 = get_close_form(p2, label)
+print(rmse(p2.dot(wg2), label))
+
+p3 = phi_basis(feature, 'sigmoid')
+wg3 = get_close_form(p3, label)
+print(rmse(p3.dot(wg3), label))
 
 
 # 3-b. 測試不同lamda
@@ -187,7 +215,9 @@ for l, lam in enumerate(lamda_list):
     rmse_trian = []
     rmse_val = []
     for m in range(5):
-        w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, lam, 4)
+        # w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, lam, 4)
+        # 選其他feature
+        w, t, v = train_vali(feature[:, [1, 2, 3, 8]], label, feature[:, [1, 2, 3, 8]], label, m, lam, 8)
         rmse_trian.append(t)
         rmse_val.append(v)
 
