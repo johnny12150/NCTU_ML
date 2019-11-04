@@ -134,17 +134,22 @@ def sigmoid_basis(x, mu, sigma=0.1):
 
 
 # 產生gaussian的phi
-def phi_basis(X, method='gaussian'):
+def phi_basis(X, sigma=0, method='gaussian'):
     phi = np.zeros(X.shape)
     # normalize
     # X = (X-np.mean(X, 0) / np.std(X, 0))
     for i in range(X.shape[1]):
         if method == 'gaussian':
-            phi[:, i] = gaussian_basis_function(X[:, i], X[:, i].mean())
+            if sigma:
+                phi[:, i] = gaussian_basis_function(X[:, i], X[:, i].mean(), sigma)
+            else:
+                phi[:, i] = gaussian_basis_function(X[:, i], X[:, i].mean())
         elif method == 'sigmoid':
-            # phi[:, i] = sigmoid_basis(X[:, i], X[:, i].mean())
-            # 直接帶該feature的sigma看看
-            phi[:, i] = sigmoid_basis(X[:, i], X[:, i].std())
+            if sigma:
+                phi[:, i] = sigmoid_basis(X[:, i], X[:, i].mean(), sigma)
+            else:
+                # 直接帶該feature的sigma看看
+                phi[:, i] = sigmoid_basis(X[:, i], X[:, i].std())
     return phi
 
 
@@ -162,7 +167,7 @@ def close_form_l2(X, Y, lamda):
     return tmp.dot(Y)
 
 
-def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1, basis='linear'):
+def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1, basis='linear', sigma=0):
     """
     算出train跟validation的loss
     :param X_train:
@@ -192,11 +197,11 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1, basis='li
 
         if basis!='linear':
             if basis =='sigmoid':
-                phi_train = phi_basis(X_train, 'sigmoid')
-                phi_test = phi_basis(X_test, 'sigmoid')
+                phi_train = phi_basis(X_train, sigma, 'sigmoid')
+                phi_test = phi_basis(X_test, sigma, 'sigmoid')
             else:
-                phi_train = phi_basis(X_train)
-                phi_test = phi_basis(X_test)
+                phi_train = phi_basis(X_train, sigma)
+                phi_test = phi_basis(X_test, sigma)
         else:
             phi_train = phi(X_train, order)
             phi_test = phi(X_test, order)
@@ -238,6 +243,8 @@ for i in range(17):
 
 plot_loss(rmse_trian, rmse_val, range(len(rmse_trian)), 'Column of feature droped')
 
+# fixme: 只使用一個feature來選特徵
+
 rmse_trian = []
 rmse_val = []
 # 2-a. 測試不同order成效
@@ -249,17 +256,34 @@ for m in range(10):
 
 plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Different order for polynomial')
 
+# todo: 透過不同的 lambda來測試error
+# todo: 做不同lambda/ sigma的 loss圖
 # 透過kmeans找center
 C, L, wicd = kmeans(feature, 17, 10000)
 # gaussian
-w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, 0, 8, 'gaussian')
+rmse_trian = []
+rmse_val = []
+sigma_list = [0.001, 0.1, 1, 10, 1000]
+for i, si in enumerate(sigma_list):
+    if si > 0.01:
+        w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, 0, 4, 'gaussian', si)
+        rmse_trian.append(t)
+        rmse_val.append(v)
+    else:
+        rmse_trian.append('Singular Matrix')
+        rmse_val.append('Singular Matrix')
 
 # sigmoid
-w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, 0, 8, 'sigmoid')
+rmse_trian = []
+rmse_val = []
+for i, si in enumerate(sigma_list):
+    w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, 0, 4, 'sigmoid', si)
+    rmse_trian.append(t)
+    rmse_val.append(v)
 
 
 # 3-b. 測試不同lamda
-lamda_list = [0.001, 0.01, 0.1, 1]
+lamda_list = [0.001, 0.01, 0.1, 1, 10, 100]
 for l, lam in enumerate(lamda_list):
     rmse_trian = []
     rmse_val = []
