@@ -1,6 +1,7 @@
 import numpy as np
 from itertools import combinations_with_replacement
 import matplotlib.pyplot as plt
+import random
 
 feature = np.genfromtxt('./dataset_X.csv', delimiter=',')[:, 1:]
 label = np.genfromtxt('./dataset_T.csv', delimiter=',')[:, -1]
@@ -85,6 +86,68 @@ def plot_loss(train, val, x_range, xtitle='order change'):
     plt.close()
 
 
+def kmeans(sample, K, maxiter):
+    """
+    :param sample: 要分群的data
+    :param K: 分幾群
+    :param maxiter: 最多跑幾次
+    :return: 回傳Center, 屬於哪群, 跟with-in-class-distance
+    """
+    N = sample.shape[0]
+    D = sample.shape[1]
+    C = np.zeros((K, D))  # K個中心點/K群的座標
+    L = np.zeros((N, 1))  # label
+    L1 = np.zeros((N, 1))
+    dist = np.zeros((N, K))
+    idx = random.sample(range(N), K)
+    C = sample[idx, :]
+    iter = 0
+    while (iter < maxiter):
+        # K個中心點分開算
+        for i in range(K):
+            # np.tile會repeat, 每個中心點repeat N*1次
+            dist[:, i] = np.sum((sample - np.tile(C[i, :], (N, 1))) ** 2, axis=1)
+        L1 = np.argmin(dist, 1)
+        if (iter > 0 and np.array_equal(L, L1)):
+            print(iter)
+            break
+        L = L1
+        for i in range(K):
+            # 取非0的index
+            idx = np.nonzero(L == i)[0]
+            if (len(idx) > 0):
+                C[i, :] = np.mean(sample[idx, :], 0)
+        iter += 1
+
+    # C[L,:] -> K類各自center
+    wicd = np.sum(np.sqrt(np.sum((sample - C[L, :]) ** 2, 1)))
+    return C, L, wicd
+
+
+# 2-a. Gaussian basis
+def gaussian_basis_function(x, mu, sigma=0.1):
+    return np.exp(-0.5 * (x - mu) ** 2 / sigma ** 2)
+
+
+def sigmoid_basis(x, mu, sigma=0.1):
+    return 1/ (1 - np.exp((x - mu)/ sigma))
+
+
+# 產生gaussian的phi
+def phi_basis(X, method='gaussian'):
+    phi = np.zeros(X.shape)
+    # normalize
+    # X = (X-np.mean(X, 0) / np.std(X, 0))
+    for i in range(X.shape[1]):
+        if method == 'gaussian':
+            phi[:, i] = gaussian_basis_function(X[:, i], X[:, i].mean())
+        elif method == 'sigmoid':
+            # phi[:, i] = sigmoid_basis(X[:, i], X[:, i].mean())
+            # 直接帶該feature的sigma看看
+            phi[:, i] = sigmoid_basis(X[:, i], X[:, i].std())
+    return phi
+
+
 # 3-a.
 def close_form_l2(X, Y, lamda):
     # https://xavierbourretsicotte.github.io/intro_ridge.html
@@ -99,7 +162,7 @@ def close_form_l2(X, Y, lamda):
     return tmp.dot(Y)
 
 
-def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
+def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1, basis='linear'):
     """
     算出train跟validation的loss
     :param X_train:
@@ -109,12 +172,12 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
     :param order: 幾次方
     :param l2: 設定lambda
     :param cross: cross_validation要切幾分
-    :return:
+    :param basis: 使用的基底函數
+    :return: weight, train跟validation的loss
     """
 
     train_l = 0
     val_l = 0
-    # val_l = []
     X = X_train.copy()
     Y = y_train.copy()
     for i in range(cross):
@@ -127,8 +190,16 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
             X_test = X[idx]
             X_train = X[list(set(range(len(Y))) - set(idx))]
 
-        phi_train = phi(X_train, order)
-        phi_test = phi(X_test, order)
+        if basis!='linear':
+            if basis =='sigmoid':
+                phi_train = phi_basis(X_train, 'sigmoid')
+                phi_test = phi_basis(X_test, 'sigmoid')
+            else:
+                phi_train = phi_basis(X_train)
+                phi_test = phi_basis(X_test)
+        else:
+            phi_train = phi(X_train, order)
+            phi_test = phi(X_test, order)
         if l2:
             w = close_form_l2(phi_train, y_train, l2)
         else:
@@ -138,7 +209,6 @@ def train_vali(X_train, y_train, X_test, y_test, order, l2=0, cross=1):
         # 計算train, validation loss
         train_l += rmse(phi_train.dot(w), y_train)
         val_l += rmse(phi_test.dot(w), y_test)
-        # val_l.append(rmse(phi_test.dot(w), y_test))
 
     train_l = train_l / cross
     val_l = val_l / cross
@@ -179,34 +249,13 @@ for m in range(10):
 
 plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Different order for polynomial')
 
+# 透過kmeans找center
+C, L, wicd = kmeans(feature, 17, 10000)
+# gaussian
+w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, 0, 8, 'gaussian')
 
-# Gaussian basis
-def gaussian_basis_function(x, mu, sigma=0.1):
-    return np.exp(-0.5 * (x - mu) ** 2 / sigma ** 2)
-
-
-def sigmoid_basis(x, mu, sigma=0.1):
-    return 1/ (1 - np.exp((x - mu)/ sigma))
-
-
-# todo: 產生gaussian的phi
-def phi_basis(X, method='gaussian'):
-    phi = np.zeros(X.shape)
-    for i in range(X.shape[1]):
-        if method == 'gaussian':
-            phi[:, i] = gaussian_basis_function(X[:, i], X[:, i].mean())
-        elif method == 'sigmoid':
-            phi[:, i] = sigmoid_basis(X[:, i], X[:, i].mean())
-    return phi
-
-
-p2 = phi_basis(feature)
-wg2 = get_close_form(p2, label)
-print(rmse(p2.dot(wg2), label))
-
-p3 = phi_basis(feature, 'sigmoid')
-wg3 = get_close_form(p3, label)
-print(rmse(p3.dot(wg3), label))
+# sigmoid
+w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, 0, 8, 'sigmoid')
 
 
 # 3-b. 測試不同lamda
