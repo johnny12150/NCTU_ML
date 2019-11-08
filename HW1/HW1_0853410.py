@@ -12,26 +12,34 @@ def phi(X, M):
     # 各次方的項數
     x_num = [1]
     phi_list = []
-    # 產生排列組合(允許重複)
-    for i in range(1, M+1):
-        com = list(combinations_with_replacement(range(X.shape[1]), i))
-        x_num.append(len(com)+x_num[i-1])
-        phi_list.extend(com)
+    if len(X.shape) > 1:
+        # 產生排列組合(允許重複)
+        for i in range(1, M+1):
+            com = list(combinations_with_replacement(range(X.shape[1]), i))
+            x_num.append(len(com)+x_num[i-1])
+            phi_list.extend(com)
+    else:
+        # 加入基本的bias
+        phi_list.append(1)
 
     # 建立Phi matrix, bias內建(M=0)
     phi_matrix = np.ones((len(X), len(phi_list)+1))
     x_num = np.asarray(x_num)
 
-    # m筆data/ row
-    for m in range(X.shape[0]):
-        # 共幾個參數
-        for n in range(len(phi_list)):
-            sum = 1
-            K = np.sort(np.argwhere(n+1 >= x_num))[-1]+1
-            for k in range(K[0]):
-                sum = sum * X[m][phi_list[n][k - 1]]
-            # 第一col是bias不動
-            phi_matrix[m, n+1] = sum
+    if len(X.shape) > 1:
+        # m筆data/ row
+        for m in range(X.shape[0]):
+            # 共幾個參數
+            for n in range(len(phi_list)):
+                sum = 1
+                K = np.sort(np.argwhere(n+1 >= x_num))[-1]+1
+                for k in range(K[0]):
+                    sum = sum * X[m][phi_list[n][k - 1]]
+                # 第一col是bias不動
+                phi_matrix[m, n+1] = sum
+    else:
+        # 處理單一個feature
+        phi_matrix[:, 1] = X
     return phi_matrix
 
 
@@ -243,7 +251,17 @@ for i in range(17):
 
 plot_loss(rmse_trian, rmse_val, range(len(rmse_trian)), 'Column of feature droped')
 
-# fixme: 只使用一個feature來選特徵
+# 只使用一個feature來選特徵
+rmse_trian = []
+rmse_val = []
+# 1-b. 挑feature
+for i in range(17):
+    tmp = feature[:, i]
+    w, t, v = train_vali(tmp[:877], label[:877], tmp[877:], label[877:], 1)
+    rmse_trian.append(t)
+    rmse_val.append(v)
+
+plot_loss(rmse_trian, rmse_val, range(len(rmse_trian)), 'Column of feature selected')
 
 rmse_trian = []
 rmse_val = []
@@ -256,8 +274,6 @@ for m in range(10):
 
 plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Different order for polynomial')
 
-# todo: 透過不同的 lambda來測試error
-# todo: 做不同lambda/ sigma的 loss圖
 # 透過kmeans找center
 C, L, wicd = kmeans(feature, 17, 10000)
 # gaussian
@@ -288,12 +304,24 @@ for l, lam in enumerate(lamda_list):
     rmse_trian = []
     rmse_val = []
     for m in range(5):
-        # w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, lam, 4)
+        # polynomial
+        w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, m, lam, 4)
         # 選其他feature
-        w, t, v = train_vali(feature[:, [1, 2, 3, 8]], label, feature[:, [1, 2, 3, 8]], label, m, lam, 8)
+        # w, t, v = train_vali(feature[:, [1, 2, 3, 8]], label, feature[:, [1, 2, 3, 8]], label, m, lam, 8)
+
         rmse_trian.append(t)
         rmse_val.append(v)
 
     # 比較 w1, w2各自的 train, test loss
-    plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Lambda= ' + str(lam) + ' L2 polynomial')
+    # plot_loss(rmse_trian, rmse_val, range(1, len(rmse_trian)+1), 'Lambda= ' + str(lam) + ' L2 polynomial')
+
+rmse_trian = []
+rmse_val = []
+for l, lam in enumerate(lamda_list):
+    # gaussian
+    w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, lam, 4, 'gaussian', 1000)
+    # sigmoid
+    # w, t, v = train_vali(feature[:, [2, 8, 13]], label, feature[:, [2, 8, 13]], label, 0, lam, 4, 'sigmoid', 0.01)
+    rmse_trian.append(t)
+    rmse_val.append(v)
 
