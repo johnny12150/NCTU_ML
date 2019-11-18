@@ -17,46 +17,44 @@ def PCA_np(features, n=2):
     cov = np.cov(C.T)
     # eigendecomposition
     eigenvalue, eigenvector = np.linalg.eig(cov)
-    # print(eigenvalue, eigenvector)
     mat = np.matrix(eigenvector[:n])
-    if len(eigenvector[:n]) == len(features[0]):
-        # project data
-        return eigenvector[:].T.dot(C.T)
-    else:
-        return np.matrix(mat.T)
+    print(eigenvector[:][:1].shape, C.shape)
+    print(eigenvector[:][:1], eigenvector[:1], eigenvector)
+    return eigenvector[:n].T.dot(C.T)
+    # if len(eigenvector[:n]) == len(features[0]):
+    #     # project data
+    #     return eigenvector[:].T.dot(C.T)
+    # else:
+    #     return np.matrix(mat.T)
 
 
-def PCA_numpy(data, n_components=2):
-    # 1nd step is to find covarience matrix
-    data_vector = []
-    for i in range(data.shape[1]):
-        data_vector.append(data[:, i])
+# 零均值化
+def zeroMean(dataMat):
+    meanVal = np.mean(dataMat, axis=0)  # 按列求均值，即求各个特征的均值
+    newData = dataMat - meanVal
+    return newData, meanVal
 
-    cov_matrix = np.cov(data_vector)
 
-    # 2rd step is to compute eigen vectors and eigne values
-    eig_values, eig_vectors = np.linalg.eig(cov_matrix)
-    eig_values = np.reshape(eig_values, (len(cov_matrix), 1))
+def pca2(dataMat, n):
+    # https://blog.csdn.net/u012162613/article/details/42177327
+    newData, meanVal = zeroMean(dataMat)
+    covMat = np.cov(newData, rowvar=0)  # 求协方差矩阵,return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
 
-    # Make pairs
-    eig_pairs = []
-    for i in range(len(eig_values)):
-        eig_pairs.append([np.abs(eig_values[i]), eig_vectors[:, i]])
-
-    eig_pairs.sort()
-    eig_pairs.reverse()
-
-    # This PCA is only for 2 components
-    reduced_data = np.hstack((eig_pairs[0][1].reshape(len(eig_pairs[0][1]), 1), eig_pairs[1][1].reshape(len(eig_pairs[0][1]), 1)))
-
-    return data.dot(reduced_data)
+    eigVals, eigVects = np.linalg.eig(np.mat(covMat))  # 求特征值和特征向量,特征向量是按列放的，即一列代表一个特征向量
+    eigValIndice = np.argsort(eigVals)  # 对特征值从小到大排序
+    n_eigValIndice = eigValIndice[-1:-(n + 1):-1]  # 最大的n个特征值的下标
+    n_eigVect = eigVects[:, n_eigValIndice]  # 最大的n个特征值对应的特征向量
+    lowDDataMat = newData * n_eigVect  # 低维特征空间的数据
+    reconMat = (lowDDataMat * n_eigVect.T) + meanVal  # 重构数据
+    return lowDDataMat
+    # return lowDDataMat, reconMat
 
 A = np.array([[1, 2], [3, 4], [5, 6]])
-PCA_np(A)
-# PCA_numpy(A, 1)
+PCA_np(A, 1).T # same as sklearn
+pca2(A, 2)
 
 from sklearn.decomposition import PCA
-pca = PCA(2)
+pca = PCA(1)
 pca.fit_transform(A)
 
 #%%
