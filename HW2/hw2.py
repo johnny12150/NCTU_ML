@@ -1,56 +1,146 @@
 #%%
 import pandas as pd
 import numpy as np
+import scipy.io as scio
 import matplotlib.pyplot as plt
 from collections import Counter
+import zipfile
+import io
+import re
+import matplotlib.image as mpimg
+from PIL import Image
 # 第一題
+# load .mat file
+dataMat = scio.loadmat('./dataset/1_data.mat')
 
 #%%
 # 第二題
+# https://stackoverflow.com/questions/46588075/read-all-files-in-zip-archive-in-python
+# https://stackoverflow.com/questions/19371860/python-open-file-from-zip-without-temporary-extracting-it
+# load zip
+archive = zipfile.ZipFile('./dataset/Faces.zip', 'r')
+# export unzipped files
+archive.extractall('./dataset/')
+# make dict for all pictures
+files = {name: archive.read(name) for name in archive.namelist() if name.endswith('.pgm')}
+pic_height = 112
+pic_width = 92
+# load pics ti np array
+pics = np.zeros(50)
+labels = np.repeat(range(1, 6), 10)
+
+def read_pgm(buffer, filename, byteorder='>'):
+    """Return image data from a raw PGM file as numpy array.
+
+    Format specification: http://netpbm.sourceforge.net/doc/pgm.html
+
+    """
+    try:
+        header, width, height, maxval = re.search(
+            b"(^P5\s(?:\s*#.*[\r\n])*"
+            b"(\d+)\s(?:\s*#.*[\r\n])*"
+            b"(\d+)\s(?:\s*#.*[\r\n])*"
+            b"(\d+)\s(?:\s*#.*[\r\n]\s)*)", buffer).groups()
+        print(header)
+    except AttributeError:
+        raise ValueError("Not a raw PGM file: '%s'" % filename)
+    return np.frombuffer(buffer,dtype='u1' if int(maxval) < 256 else byteorder+'u2', count=int(width)*int(height),
+                        offset=len(header)).reshape((int(height), int(width)))
+
+
+pic_header = len(b'P5\n92 112\n255\n')
+for i, k in enumerate(files):
+    # bytes_io = io.BytesIO(files[k]).read()
+    # https://stackoverflow.com/questions/7368739/numpy-and-16-bit-pgm
+    # print(np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width)))
+    print(np.array_equal(read_pgm(files[k], k), np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width))))
+    break
+    # pics[i] = mpimg.imread('./dataset/'+k)
+
+# todo: random select train
+
+# todo: normalize pics
+
+def phi(x):
+    x = np.reshape(x, (len(x), 1))
+    return x
+
+def cross_entropy(predict, target):
+    return -np.sum(predict * np.log(target))
+
+def softmax(n, k, w, X):  # 公式裡的y
+    s = np.float64(0.)
+    ak = w[k].T.dot(phi(X[n]))
+    for j in range(3):
+        aj = w[j].T.dot(phi(X[n]))
+        s += np.nan_to_num(np.exp(aj - ak))
+    s = np.nan_to_num(s)
+    return 1. / s
+
+
+def gradient(w, k, t, X):
+    output = np.zeros((len(w[0]), 1))
+    for n in range(len(X)):
+        scale = softmax(n, k, w, X) - t[:, k][n]  # Ynk - Tnk
+        output += scale * phi(X[n])
+    return output
+
+
+def hessian(w, k, X):
+    output = np.zeros((len(w[0]), len(w[0])))
+    for n in range(len(X)):
+        scale = softmax(n, k, w, X) * (1 - softmax(n, k, w, X))
+        output += scale * (phi(X[n]).dot(phi(X[n]).T))
+    return output
+
+def classify(w,x):
+    softmaxes = []
+    for k in range(3):
+        s = np.float64(0.)
+        ak = w[k].T.dot(phi(x))
+        for j in range(3):
+            aj = w[j].T.dot(phi(x))
+            s += np.nan_to_num(np.exp(aj - ak))
+        softmaxes += [1./s]
+    return softmaxes.index(max(softmaxes))
+
+w = np.zeros((3,len(phi(feature[0])),1))
+cee = []
+acc = []
+# epoch
+for ep in range(20):
+    e = error(w,target, feature)
+    acc += [accuracy(w,target,feature)]
+    cee += [np.reshape(e, 1)]
+    for k in range(3):
+        w[k] = w[k] - np.linalg.inv(hessian(w,k,feature)).dot(gradient(w,k,target,feature))
+
+
 def PCA_np(features, n=2):
     # https://sebastianraschka.com/Articles/2014_pca_step_by_step.html
+    # https://blog.csdn.net/u012162613/article/details/42177327
     # mean of features
     M = np.mean(features.T, axis=1)
     # center column
     C = features - M
     # covariance matrix
-    cov = np.cov(C.T)
+    cov = np.cov(C, rowvar=0) # 求协方差矩阵,return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
     # eigendecomposition
-    eigenvalue, eigenvector = np.linalg.eig(cov)
-    mat = np.matrix(eigenvector[:n])
-    print(eigenvector[:][:1].shape, C.shape)
-    print(eigenvector[:][:1], eigenvector[:1], eigenvector)
-    return eigenvector[:n].T.dot(C.T)
+    eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
+    sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
+    topNvalue = sortEigValue[-1:-(n + 1):-1]  # select top n value
+    n_eigVect = eigenvector[:, topNvalue]  # select largest n eigenvector
+    # recon = (C*n_eigVect.T) + M  # reconstruct to original data
+    return C*n_eigVect  # transform to low dim data
 
-
-# 零均值化
-def zeroMean(dataMat):
-    meanVal = np.mean(dataMat, axis=0)  # 按列求均值，即求各个特征的均值
-    newData = dataMat - meanVal
-    return newData, meanVal
-
-
-def pca2(dataMat, n):
-    # https://blog.csdn.net/u012162613/article/details/42177327
-    newData, meanVal = zeroMean(dataMat)
-    covMat = np.cov(newData, rowvar=0)  # 求协方差矩阵,return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
-
-    eigVals, eigVects = np.linalg.eig(np.mat(covMat))  # 求特征值和特征向量,特征向量是按列放的，即一列代表一个特征向量
-    eigValIndice = np.argsort(eigVals)  # sort eigenvalue
-    n_eigValIndice = eigValIndice[-1:-(n + 1):-1]  # select top n value
-    n_eigVect = eigVects[:, n_eigValIndice]  # select largest n eigenvector
-    lowDDataMat = newData * n_eigVect  # transform to low dim data
-    reconMat = (lowDDataMat * n_eigVect.T) + meanVal  # reconstruct to original data
-    return lowDDataMat
-    # return lowDDataMat, reconMat
 
 A = np.array([[1, 2], [3, 4], [5, 6]])
-PCA_np(A, 2).T # same as sklearn
-pca2(A, 2)
+PCA_np(A, 1)
 
 from sklearn.decomposition import PCA
 pca = PCA(1)
 pca.fit_transform(A)
+
 
 #%%
 # 第三題
@@ -96,13 +186,10 @@ for col in categorical_col:
     pokemon_ohe[col], uni = pokemon[col].factorize()
     uniques.append(uni.tolist())
 
+# todo: 測試分開train, test做normalize
 pokemon_norm = pokemon_ohe.copy()
 # normalize
 pokemon_norm = (pokemon_norm - pokemon_norm.mean()) / pokemon_norm.std()
-
-# pokemon_np = pokemon_ohe.values
-# # np style
-# pokemon_np = (pokemon_np - np.mean(pokemon_np, 0)) / np.std(pokemon_np, 0)
 
 target = pokemon_norm['Type 1'].copy()
 pokemon_norm = pokemon_norm.drop(['Type 1'], axis=1)
@@ -123,7 +210,7 @@ dim = [7, 6, 5]
 for d in dim:
     acc = []
     # convert np matrix to array
-    pca_data = np.asarray(pca2(pokemon_norm.values, d))
+    pca_data = np.asarray(PCA_np(pokemon_norm.values, d))
     for k in range(1, 11):
         predictions = []
         #  compare each test sample with 120 training samples
@@ -134,3 +221,5 @@ for d in dim:
         acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
 
     plot_knn(acc, range(1, 11))
+
+#%%
