@@ -5,10 +5,7 @@ import scipy.io as scio
 import matplotlib.pyplot as plt
 from collections import Counter
 import zipfile
-import io
-import re
 import matplotlib.image as mpimg
-from PIL import Image
 # 第一題
 # load .mat file
 dataMat = scio.loadmat('./dataset/1_data.mat')
@@ -23,55 +20,36 @@ archive = zipfile.ZipFile('./dataset/Faces.zip', 'r')
 archive.extractall('./dataset/')
 # make dict for all pictures
 files = {name: archive.read(name) for name in archive.namelist() if name.endswith('.pgm')}
+# fixme: 如果解壓縮失敗，能夠自動讀取已經解壓縮的
 pic_height = 112
 pic_width = 92
 # load pics ti np array
-pics = np.zeros(50)
+pics = np.zeros((50, pic_height, pic_width))
 labels = np.repeat(range(1, 6), 10)
-
-def read_pgm(buffer, filename, byteorder='>'):
-    """Return image data from a raw PGM file as numpy array.
-
-    Format specification: http://netpbm.sourceforge.net/doc/pgm.html
-
-    """
-    try:
-        header, width, height, maxval = re.search(
-            b"(^P5\s(?:\s*#.*[\r\n])*"
-            b"(\d+)\s(?:\s*#.*[\r\n])*"
-            b"(\d+)\s(?:\s*#.*[\r\n])*"
-            b"(\d+)\s(?:\s*#.*[\r\n]\s)*)", buffer).groups()
-        print(header)
-    except AttributeError:
-        raise ValueError("Not a raw PGM file: '%s'" % filename)
-    return np.frombuffer(buffer,dtype='u1' if int(maxval) < 256 else byteorder+'u2', count=int(width)*int(height),
-                        offset=len(header)).reshape((int(height), int(width)))
-
-
 pic_header = len(b'P5\n92 112\n255\n')
 for i, k in enumerate(files):
-    # bytes_io = io.BytesIO(files[k]).read()
-    # https://stackoverflow.com/questions/7368739/numpy-and-16-bit-pgm
-    # print(np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width)))
-    print(np.array_equal(read_pgm(files[k], k), np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width))))
-    break
+    # read pgm, https://stackoverflow.com/questions/7368739/numpy-and-16-bit-pgm
+    pics[i] = np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width))
     # pics[i] = mpimg.imread('./dataset/'+k)
+
+# normalize pics
+pics_norm = pics/ 255
 
 # todo: random select train
 
-# todo: normalize pics
 
-def phi(x):
-    x = np.reshape(x, (len(x), 1))
-    return x
+def phi(X):
+    return np.reshape(X, (len(X), 1))
+
 
 def cross_entropy(predict, target):
     return -np.sum(predict * np.log(target))
 
+
 def softmax(n, k, w, X):  # 公式裡的y
     s = np.float64(0.)
     ak = w[k].T.dot(phi(X[n]))
-    for j in range(3):
+    for j in range(5):
         aj = w[j].T.dot(phi(X[n]))
         s += np.nan_to_num(np.exp(aj - ak))
     s = np.nan_to_num(s)
@@ -93,6 +71,16 @@ def hessian(w, k, X):
         output += scale * (phi(X[n]).dot(phi(X[n]).T))
     return output
 
+
+def error(w,t,X):
+    s = np.float64(0.)
+    for n in range(len(X)):
+        for k in range(5):
+            if t[:,k][n] != 0.:
+                s += np.nan_to_num(np.log(softmax(n,k,w,X)))
+    return -1*s
+
+
 def classify(w,x):
     softmaxes = []
     for k in range(3):
@@ -104,7 +92,29 @@ def classify(w,x):
         softmaxes += [1./s]
     return softmaxes.index(max(softmaxes))
 
-w = np.zeros((3,len(phi(feature[0])),1))
+
+# todo 1. GD
+# fixme: picture flatten, target ohe
+feature = pics_norm.reshape(50, -1)
+target = pd.get_dummies(labels).values
+# target.columns = list(range(5))
+classes = 5
+w = np.zeros((classes, len(phi(feature[0])), 1))
+cee = []
+acc = []
+lr = 0.1
+# epoch
+for ep in range(20):
+    # x = feature.dot(w)
+    # prediction
+    p = error(w, target, feature)
+    for k in range(classes):
+        # fixme: w is too small
+        w -= lr*gradient(w, k, target, feature)
+    break
+
+# todo: train起來
+w = np.zeros((classes, len(phi(feature[0])), 1))
 cee = []
 acc = []
 # epoch
@@ -112,7 +122,8 @@ for ep in range(20):
     e = error(w,target, feature)
     acc += [accuracy(w,target,feature)]
     cee += [np.reshape(e, 1)]
-    for k in range(3):
+    for k in range(classes):
+        # 2. 牛頓法
         w[k] = w[k] - np.linalg.inv(hessian(w,k,feature)).dot(gradient(w,k,target,feature))
 
 
