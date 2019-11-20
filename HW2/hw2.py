@@ -206,10 +206,14 @@ def euclidean_distance(d1, d2):
     return np.sqrt(np.sum(distance, 1))
 
 
-def knn(train, test, target, k):
+def knn(test, train, target, k):
     distances = euclidean_distance(train, test)
-    idx = sorted(range(len(distances)), key=lambda i: distances[i])[0:k]
-    return Counter(target[idx]).most_common(1)[0][0]
+    # idx = sorted(range(len(distances)), key=lambda i: distances[i])[:k]
+    # return Counter(target[idx]).most_common(1)[0][0]
+    # 照距離排序
+    class_num = np.argsort(distances)[:k]
+    # 各類別有幾個，挑最多個那個class
+    return np.bincount(target[class_num]).argmax()
 
 
 def plot_knn(acc, k_range):
@@ -239,7 +243,8 @@ pokemon_norm = pokemon_ohe.copy()
 # normalize
 pokemon_norm = (pokemon_norm - pokemon_norm.mean()) / pokemon_norm.std()
 
-target = pokemon_norm['Type 1'].copy()
+target_ohe = pokemon_norm['Type 1'].copy()
+target = pokemon_ohe['Type 1'].values
 pokemon_norm = pokemon_norm.drop(['Type 1'], axis=1)
 acc = []
 for k in range(1, 11):
@@ -247,6 +252,7 @@ for k in range(1, 11):
     #  compare each test sample with 120 training samples
     for j in range(38):
         j = 120+j
+        # fixme: target不normal
         predictions.append(knn(pokemon_norm.iloc[j, :], pokemon_norm[:120], target[:120], k))
     # 1. 計算Acc
     acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
@@ -264,14 +270,9 @@ for d in dim:
         #  compare each test sample with 120 training samples
         for j in range(38):
             j = 120 + j
-            # predictions.append(knn(pca_data[j], pca_data[:120], target[:120], k))
-            neigh = KNeighborsClassifier(n_neighbors=k)
-            aa = pokemon_ohe['Type 1'][:120].values.reshape(-1, 1)
-            neigh.fit(pca_data[:120], aa)
-            predictions.extend(neigh.predict(pca_data[j].reshape(-1, d)))
+            predictions.append(knn(pca_data[j], pca_data[:120], target[:120], k))
         # 計算Acc
-        # acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
-        acc.append(np.count_nonzero(predictions == pokemon_ohe['Type 1'][120:]) / len(pokemon_ohe['Type 1'][120:]))
+        acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
 
     plot_knn(acc, range(1, 11))
 
