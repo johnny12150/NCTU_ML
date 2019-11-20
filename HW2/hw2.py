@@ -129,7 +129,8 @@ for ep in range(1000):
     prob = softmax_result(score)
     m = x1.shape[0]
     # cross entropy
-    loss = (-1/ m) * np.sum(y1 * np.log(prob))
+    # loss = (-1/ m) * np.sum(y1 * np.log(prob))
+    loss = (-1/ m) * cross_entropy(y1, prob)
     losses.append(loss)
     grad = (-1/ m) * np.dot(x1.T, (y1 - prob))
     w_1 -= lr*grad
@@ -147,7 +148,7 @@ pred = np.where(pred_score > 0.5, 1, 0)
 # all with axis equal 1 will compare whether each row matches the answer
 print((pred == y_test).all(axis=1).mean())
 # test loss
-print((-1/25)*np.sum(y_test * np.log(pred_score)))
+print((-1/25)*cross_entropy(y_test, pred_score))
 
 # todo: train起來
 w = np.zeros((classes, len(phi(feature[0])), 1))
@@ -155,11 +156,12 @@ cee = []
 acc = []
 # epoch
 for ep in range(20):
-    e = error(w,target, feature)
+    e = error(w, target, feature)
     cee += [np.reshape(e, 1)]
     for k in range(classes):
         # 2. 牛頓法
-        w[k] = w[k] - np.linalg.inv(hessian(w,k,feature)).dot(gradient(w,k,target,feature))
+        w[k] = w[k] - np.linalg.inv(hessian(w, k, feature)).dot(gradient(w, k, target, feature))
+    break
 
 
 def PCA_np(features, n=2):
@@ -190,7 +192,7 @@ pca.fit_transform(A)
 
 #%%
 # 第三題
-pokemon = pd.read_csv('./dataset/Pokemon.csv')
+pokemon = pd.read_csv('./dataset/Pokemon.csv', index_col=0)
 
 
 def euclidean_distance(d1, d2):
@@ -200,7 +202,7 @@ def euclidean_distance(d1, d2):
     :param d2: test
     :return:
     """
-    distance = (d1 - d2)**2
+    distance = (d2 - d1)**2
     return np.sqrt(np.sum(distance, 1))
 
 
@@ -262,9 +264,14 @@ for d in dim:
         #  compare each test sample with 120 training samples
         for j in range(38):
             j = 120 + j
-            predictions.append(knn(pca_data[j], pca_data[:120], target[:120], k))
+            # predictions.append(knn(pca_data[j], pca_data[:120], target[:120], k))
+            neigh = KNeighborsClassifier(n_neighbors=k)
+            aa = pokemon_ohe['Type 1'][:120].values.reshape(-1, 1)
+            neigh.fit(pca_data[:120], aa)
+            predictions.extend(neigh.predict(pca_data[j].reshape(-1, d)))
         # 計算Acc
-        acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
+        # acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
+        acc.append(np.count_nonzero(predictions == pokemon_ohe['Type 1'][120:]) / len(pokemon_ohe['Type 1'][120:]))
 
     plot_knn(acc, range(1, 11))
 
