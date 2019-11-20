@@ -45,7 +45,7 @@ for i in range(5):
     idx = np.random.choice(np.arange(10), 5, replace=False) + i*10
     idxs.extend(idx)
     # the rest is test
-    t_idx = list(set(np.arange(10)) - set(idx))
+    t_idx = list(set(np.arange(i*10, 10 + i*10)) - set(idx))
     t_idxs.extend(t_idx)
 
 X_train = feature[idxs]
@@ -119,17 +119,19 @@ classes = 5
 w_1 = np.zeros([feature.shape[1], classes])
 losses = []
 lr = 1e-3
+x1 = X_train
+y1 = y_train
 # epoch
-for ep in range(10000):
+for ep in range(1000):
     # https://medium.com/@awjuliani/simple-softmax-in-python-tutorial-d6b4c4ed5c16
     # value of w * x
-    score = np.dot(feature, w_1)
+    score = np.dot(x1, w_1)
     prob = softmax_result(score)
-    m = feature.shape[0]
+    m = x1.shape[0]
     # cross entropy
-    loss = (-1/ m) * np.sum(target * np.log(prob))
+    loss = (-1/ m) * np.sum(y1 * np.log(prob))
     losses.append(loss)
-    grad = (-1/ m) * np.dot(feature.T, (target - prob))
+    grad = (-1/ m) * np.dot(x1.T, (y1 - prob))
     w_1 -= lr*grad
 
 # plot GD train loss
@@ -138,6 +140,15 @@ plt.xlabel('Number Epochs')
 plt.ylabel('Loss')
 plt.show()
 
+# predict ohe class
+pred_score = softmax_result(np.dot(X_test, w_1))
+pred = np.where(pred_score > 0.5, 1, 0)
+# test acc
+# all with axis equal 1 will compare whether each row matches the answer
+print((pred == y_test).all(axis=1).mean())
+# test loss
+print((-1/25)*np.sum(y_test * np.log(pred_score)))
+
 # todo: train起來
 w = np.zeros((classes, len(phi(feature[0])), 1))
 cee = []
@@ -145,7 +156,6 @@ acc = []
 # epoch
 for ep in range(20):
     e = error(w,target, feature)
-    acc += [accuracy(w,target,feature)]
     cee += [np.reshape(e, 1)]
     for k in range(classes):
         # 2. 牛頓法
