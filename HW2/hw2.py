@@ -17,7 +17,7 @@ dataMat = scio.loadmat('./dataset/1_data.mat')
 # load zip
 archive = zipfile.ZipFile('./dataset/Faces.zip', 'r')
 # export unzipped files
-archive.extractall('./dataset/')
+# archive.extractall('./dataset/')
 # make dict for all pictures
 files = {name: archive.read(name) for name in archive.namelist() if name.endswith('.pgm')}
 # fixme: 如果解壓縮失敗，能夠自動讀取已經解壓縮的
@@ -34,8 +34,24 @@ for i, k in enumerate(files):
 
 # normalize pics
 pics_norm = pics/ 255
+feature = pics_norm.reshape(50, -1)  # picture flatten
+target = pd.get_dummies(labels).values  # ohe target
 
-# todo: random select train
+idxs = []
+t_idxs = []
+# random select train
+for i in range(5):
+    # random select five for training in each subject
+    idx = np.random.choice(np.arange(10), 5, replace=False) + i*10
+    idxs.extend(idx)
+    # the rest is test
+    t_idx = list(set(np.arange(10)) - set(idx))
+    t_idxs.extend(t_idx)
+
+X_train = feature[idxs]
+y_train = target[idxs]
+X_test = feature[t_idxs]
+y_test = target[t_idxs]
 
 
 def phi(X):
@@ -93,25 +109,34 @@ def classify(w,x):
     return softmaxes.index(max(softmaxes))
 
 
-# todo 1. GD
-# fixme: picture flatten, target ohe
-feature = pics_norm.reshape(50, -1)
-target = pd.get_dummies(labels).values
-# target.columns = list(range(5))
+def softmax_result(z):
+    z -= np.max(z)
+    return (np.exp(z).T / np.sum(np.exp(z), axis=1)).T
+
+
+# 1. GD
 classes = 5
-w = np.zeros((classes, len(phi(feature[0])), 1))
-cee = []
-acc = []
-lr = 0.1
+w_1 = np.zeros([feature.shape[1], classes])
+losses = []
+lr = 1e-3
 # epoch
-for ep in range(20):
-    # x = feature.dot(w)
-    # prediction
-    p = error(w, target, feature)
-    for k in range(classes):
-        # fixme: w is too small
-        w -= lr*gradient(w, k, target, feature)
-    break
+for ep in range(10000):
+    # https://medium.com/@awjuliani/simple-softmax-in-python-tutorial-d6b4c4ed5c16
+    # value of w * x
+    score = np.dot(feature, w_1)
+    prob = softmax_result(score)
+    m = feature.shape[0]
+    # cross entropy
+    loss = (-1/ m) * np.sum(target * np.log(prob))
+    losses.append(loss)
+    grad = (-1/ m) * np.dot(feature.T, (target - prob))
+    w_1 -= lr*grad
+
+# plot GD train loss
+plt.plot(losses)
+plt.xlabel('Number Epochs')
+plt.ylabel('Loss')
+plt.show()
 
 # todo: train起來
 w = np.zeros((classes, len(phi(feature[0])), 1))
@@ -135,7 +160,7 @@ def PCA_np(features, n=2):
     # center column
     C = features - M
     # covariance matrix
-    cov = np.cov(C, rowvar=0) # 求协方差矩阵,return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
+    cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
     # eigendecomposition
     eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
     sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
