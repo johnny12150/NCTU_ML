@@ -129,7 +129,6 @@ for ep in range(1000):
     prob = softmax_result(score)
     m = x1.shape[0]
     # cross entropy
-    # loss = (-1/ m) * np.sum(y1 * np.log(prob))
     loss = (-1/ m) * cross_entropy(y1, prob)
     losses.append(loss)
     grad = (-1/ m) * np.dot(x1.T, (y1 - prob))
@@ -150,6 +149,49 @@ print((pred == y_test).all(axis=1).mean())
 # test loss
 print((-1/25)*cross_entropy(y_test, pred_score))
 
+
+# todo: 畫PCA
+def PCA_np(features, n=2):
+    # https://sebastianraschka.com/Articles/2014_pca_step_by_step.html
+    # https://blog.csdn.net/u012162613/article/details/42177327
+    # mean of features
+    M = np.mean(features.T, axis=1)
+    # center column
+    C = features - M
+    t0 = datetime.datetime.now()
+    # covariance matrix
+    cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
+    print(datetime.datetime.now() - t0)
+    # eigendecomposition
+    eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
+    print(datetime.datetime.now() - t0)
+    sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
+    topNvalue = sortEigValue[-1:-(n + 1):-1]  # select top n value
+    n_eigVect = eigenvector[:, topNvalue]  # select largest n eigenvector
+    print(topNvalue.shape, n_eigVect[0].shape, n_eigVect.shape)  # n_eigVect.T is the sklearn pca fit() component_
+    # recon = (C*n_eigVect.T) + M  # reconstruct to original data
+    return C*n_eigVect, n_eigVect.T  # transform to low dim data (same as the return of sklearn fit_transform())
+
+
+import datetime
+t1 = datetime.datetime.now()
+# comp is a matrix
+pca55, comp = PCA_np(feature, 5)
+# convert complex type to float
+# [n.real for n in np.asarray(comp)]
+print(datetime.datetime.now()-t1)
+# https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
+from PIL import Image
+from sklearn.decomposition import PCA
+pca = PCA(5)
+pca5 = pca.fit(feature)  # pca5.components_ 為(5, 92)應該是eigenvector
+print(pca5.components_[0].shape)
+print(np.equal(np.asarray([n.real for n in np.asarray(comp)]), pca5.components_))
+img = Image.fromarray(pca5.components_[0].reshape(112, 92))
+img = Image.fromarray(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
+img.save('./eigenface3.png')
+img.show()
+
 # todo: train起來
 w = np.zeros((classes, len(phi(feature[0])), 1))
 cee = []
@@ -164,30 +206,8 @@ for ep in range(20):
     break
 
 
-def PCA_np(features, n=2):
-    # https://sebastianraschka.com/Articles/2014_pca_step_by_step.html
-    # https://blog.csdn.net/u012162613/article/details/42177327
-    # mean of features
-    M = np.mean(features.T, axis=1)
-    # center column
-    C = features - M
-    # covariance matrix
-    cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
-    # eigendecomposition
-    eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
-    sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
-    topNvalue = sortEigValue[-1:-(n + 1):-1]  # select top n value
-    n_eigVect = eigenvector[:, topNvalue]  # select largest n eigenvector
-    # recon = (C*n_eigVect.T) + M  # reconstruct to original data
-    return C*n_eigVect  # transform to low dim data
-
-
 A = np.array([[1, 2], [3, 4], [5, 6]])
 PCA_np(A, 1)
-
-from sklearn.decomposition import PCA
-pca = PCA(1)
-pca.fit_transform(A)
 
 
 #%%
@@ -212,16 +232,14 @@ def knn(test, train, target, k):
     idx = sorted(range(len(distances)), key=lambda i: distances[i])[:k]
     # 替代方案
     # idx = np.argsort(distances)[:k]
-
-    # return Counter(target[idx]).most_common(1)[0][0]
     # 各類別有幾個，挑最多個那個class
     un, cn = np.unique(target[idx], return_counts=True)
     # 替代方案
     # np.bincount(target[idx]).argmax()
-    # Counter與np的比較
-    if not np.equal(un[cn.argmax()], Counter(target[idx]).most_common(1)[0][0]):
-        print(Counter(target[idx]))
-        print(Counter(target[idx]).most_common(1)[0][0], un[cn.argmax()])
+    # most common與np的比較
+    # if not np.equal(un[cn.argmax()], Counter(target[idx]).most_common(1)[0][0]):
+    #     print(Counter(target[idx]))
+    #     print(Counter(target[idx]).most_common(1)[0][0], un[cn.argmax()])
     return un[cn.argmax()]
 
 
@@ -271,6 +289,7 @@ plot_knn(acc, range(1, 11))
 dim = [7, 6, 5]
 for d in dim:
     acc = []
+    # fixme: 用原始照片, 每次帶一張做pca
     # convert np matrix to array
     pca_data = np.asarray(PCA_np(pokemon_norm.values, d))
     for k in range(1, 11):
