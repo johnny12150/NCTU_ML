@@ -191,6 +191,9 @@ img = Image.fromarray(pca5.components_[0].reshape(112, 92))
 img = Image.fromarray(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
 img.save('./eigenface3.png')
 img.show()
+plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
+plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92), cmap='gray')
+plt.show()
 
 # todo: train起來
 w = np.zeros((classes, len(phi(feature[0])), 1))
