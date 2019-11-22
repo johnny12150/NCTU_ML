@@ -3,9 +3,7 @@ import pandas as pd
 import numpy as np
 import scipy.io as scio
 import matplotlib.pyplot as plt
-from collections import Counter
 import zipfile
-import matplotlib.image as mpimg
 # 第一題
 # load .mat file
 dataMat = scio.loadmat('./dataset/1_data.mat')
@@ -150,62 +148,79 @@ print((pred == y_test).all(axis=1).mean())
 print((-1/25)*cross_entropy(y_test, pred_score))
 
 
-# todo: 畫PCA
-def PCA_np(features, n=2):
+def PCA_np(features, n=2, svd=0):
+    """
+    :param features:
+    :param n:
+    :param svd: 決定要不要使用svd來加快計算的速度
+    :return:
+    """
     # https://sebastianraschka.com/Articles/2014_pca_step_by_step.html
     # https://blog.csdn.net/u012162613/article/details/42177327
     # mean of features
     M = np.mean(features.T, axis=1)
     # center column
     C = features - M
-    t0 = datetime.datetime.now()
-    # covariance matrix
-    cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray；若rowvar非0，一列代表一个样本，为0，一行代表一个样本
-    print(datetime.datetime.now() - t0)
-    # eigendecomposition
-    eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
-    print(datetime.datetime.now() - t0)
-    sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
-    topNvalue = sortEigValue[-1:-(n + 1):-1]  # select top n value
-    n_eigVect = eigenvector[:, topNvalue]  # select largest n eigenvector
-    print(topNvalue.shape, n_eigVect[0].shape, n_eigVect.shape)  # n_eigVect.T is the sklearn pca fit() component_
-    # recon = (C*n_eigVect.T) + M  # reconstruct to original data
-    return C*n_eigVect, n_eigVect.T  # transform to low dim data (same as the return of sklearn fit_transform())
+    # eigendecomposition, fixme: need to speed up by svd
+    if svd:
+        cov = np.cov(C)
+        u, d, v = np.linalg.svd(cov)
+        Trans = np.dot(features.T, u[:, :n])
+        eigenvector = v[:, :n]
+        return eigenvector, Trans.T
+    else:
+        # covariance matrix
+        cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray
+        eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
+        sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
+        topNvalue = sortEigValue[-1:-(n + 1):-1]  # select top n value
+        n_eigVect = eigenvector[:, topNvalue]  # select largest n eigenvector
+        print(topNvalue.shape, n_eigVect.shape)  # n_eigVect.T is the sklearn pca fit() component_
+        # recon = (C*n_eigVect.T) + M  # reconstruct to original data
+        Trans = C*n_eigVect  # transform to low dim data (same as the return of sklearn fit_transform())
+        # transform matrix to array
+        Trans = np.asarray(Trans)
+        return Trans, n_eigVect.T
 
 
-import datetime
-t1 = datetime.datetime.now()
 # comp is a matrix
-pca55, comp = PCA_np(feature, 5)
-# convert complex type to float
-# [n.real for n in np.asarray(comp)]
-print(datetime.datetime.now()-t1)
+pca55, comp = PCA_np(feature, 5, 1)
+pca54, cc = PCA_np(feature, 5)  # this one returns matrix
+# convert complex type to float, [n.real for n in np.asarray(comp)]
 # https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
 from PIL import Image
 from sklearn.decomposition import PCA
 pca = PCA(5)
 pca5 = pca.fit(feature)  # pca5.components_ 為(5, 92)應該是eigenvector
-print(pca5.components_[0].shape)
-print(np.equal(np.asarray([n.real for n in np.asarray(comp)]), pca5.components_))
-img = Image.fromarray(pca5.components_[0].reshape(112, 92))
-img = Image.fromarray(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
-img.save('./eigenface3.png')
-img.show()
-plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
-plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92), cmap='gray')
+c5 = pca.transform(feature)
+
+# PIL failed, value of array should between 0 and 255 for PIL
+# img = Image.fromarray(pca5.components_[0].reshape(112, 92), mode='L')
+# img = Image.fromarray(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
+# img.save('./eigenface.png')
+# img.show()
+
+# worked, https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
+# plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))  # colorful one
+# plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92), cmap='gray')
+plt.imshow(comp[0].reshape(112, 92), cmap='gray')  # for svd
+plt.xticks(())
+plt.yticks(())
 plt.show()
 
 # todo: train起來
 w = np.zeros((classes, len(phi(feature[0])), 1))
 cee = []
 acc = []
+dim = [2, 5, 10]
 # epoch
 for ep in range(20):
-    e = error(w, target, feature)
+    pca_feature = PCA_np(feature, 5, 1)
+    e = error(w, target, pca_feature)
     cee += [np.reshape(e, 1)]
     for k in range(classes):
         # 2. 牛頓法
-        w[k] = w[k] - np.linalg.inv(hessian(w, k, feature)).dot(gradient(w, k, target, feature))
+        w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, target, pca_feature))
     break
 
 
@@ -293,8 +308,7 @@ dim = [7, 6, 5]
 for d in dim:
     acc = []
     # fixme: 用原始照片, 每次帶一張做pca
-    # convert np matrix to array
-    pca_data = np.asarray(PCA_np(pokemon_norm.values, d))
+    pca_data, pca_vec = PCA_np(pokemon_norm.values, d)
     for k in range(1, 11):
         predictions = []
         #  compare each test sample with 120 training samples
