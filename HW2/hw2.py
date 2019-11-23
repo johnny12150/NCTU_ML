@@ -78,6 +78,7 @@ def gradient(w, k, t, X):
     return output
 
 
+# 對error二次微分
 def hessian(w, k, X):
     output = np.zeros((len(w[0]), len(w[0])))
     for n in range(len(X)):
@@ -135,7 +136,7 @@ plot_loss_acc(losses, 'Number Epochs', 'Loss')
 pred_score = softmax_result(np.dot(X_test, w_1))
 pred = np.where(pred_score > 0.5, 1, 0)
 # test acc
-# all with axis equal 1 will compare whether each row matches the answer
+# all with axis= 1 will compare whether each row matches the answer
 print((pred == y_test).all(axis=1).mean())
 # test loss
 print((-1/25)*cross_entropy(y_test, pred_score))
@@ -241,17 +242,16 @@ for i in range(comp_svd.shape[0]):
 
 def classify(w, x, classes):
     softmaxes = []
-    for n in range(x.shape[0]):
+    for k in range(classes):
         s = np.float64(0.)
-        ak = w[k].T.dot(phi(x[n]))
+        ak = w[k].T.dot(phi(x))
         for j in range(classes):
-            aj = w[j].T.dot(phi(x[n]))
+            aj = w[j].T.dot(phi(x))
             s += np.nan_to_num(np.exp(aj - ak))
         softmaxes += [1./s]
     return softmaxes.index(max(softmaxes))
 
 
-# todo: train起來
 dim = [2, 5, 10]
 for d in dim:
     err = []
@@ -266,10 +266,14 @@ for d in dim:
         for k in range(classes):
             # 2. 牛頓法
             w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, target, pca_feature))
-        prediction = classify(w, pca_feature, classes)
-        # out = pca_feature.dot(w)
-        # prediction = softmax_result(out)
-        acc.append((prediction == target).all(axis=1).mean())
+        prediction = []
+        for n in pca_feature:
+            prediction.append(classify(w, n, classes))
+
+        # todo: use ohe label
+        # acc.append((prediction == target).all(axis=1).mean())
+        prediction = [g+1 for g in prediction]
+        acc.append(np.count_nonzero(prediction == labels)/ len(labels))
 
     # plot_loss_acc(cee, 'Number Epochs', 'Loss')
     plot_loss_acc(acc, 'Number Epochs', 'Accuracy')
