@@ -52,8 +52,8 @@ X_test = feature[t_idxs]
 y_test = target[t_idxs]
 
 
-def phi(X):
-    return np.reshape(X, (len(X), 1))
+def phi(x):
+    return x.reshape(len(x), 1)
 
 
 def cross_entropy(predict, target):
@@ -86,25 +86,13 @@ def hessian(w, k, X):
     return output
 
 
-def error(w,t,X):
+def error(w, t, X):
     s = np.float64(0.)
     for n in range(len(X)):
         for k in range(5):
-            if t[:,k][n] != 0.:
-                s += np.nan_to_num(np.log(softmax(n,k,w,X)))
+            if t[:, k][n] != 0.:
+                s += np.nan_to_num(np.log(softmax(n, k, w, X)))
     return -1*s
-
-
-def classify(w,x):
-    softmaxes = []
-    for k in range(3):
-        s = np.float64(0.)
-        ak = w[k].T.dot(phi(x))
-        for j in range(3):
-            aj = w[j].T.dot(phi(x))
-            s += np.nan_to_num(np.exp(aj - ak))
-        softmaxes += [1./s]
-    return softmaxes.index(max(softmaxes))
 
 
 def softmax_result(z):
@@ -132,11 +120,16 @@ for ep in range(1000):
     grad = (-1/ m) * np.dot(x1.T, (y1 - prob))
     w_1 -= lr*grad
 
+
+def plot_loss_acc(record, x_axis, y_axis):
+    plt.plot(record)
+    plt.xlabel(x_axis)
+    plt.ylabel(y_axis)
+    plt.show()
+
+
 # plot GD train loss
-plt.plot(losses)
-plt.xlabel('Number Epochs')
-plt.ylabel('Loss')
-plt.show()
+plot_loss_acc(losses, 'Number Epochs', 'Loss')
 
 # predict ohe class
 pred_score = softmax_result(np.dot(X_test, w_1))
@@ -187,11 +180,11 @@ def PCA_np(features, n=2, svd=0):
         # svd will do on the data
         # https://stats.stackexchange.com/questions/134282/relationship-between-svd-and-pca-how-to-use-svd-to-perform-pca
         u, d, v = np.linalg.svd(C, full_matrices=False)  # It's not necessary to compute the full matrix of U or V
-        u, v = svd_flip(u, v)          # 處理正負號
+        u, v = svd_flip(u, v)  # 處理正負號(圖就會跟sklearn一致, 沒有就會跟np_eig一致)
         Trans_comp = np.dot(features.T, u[:, :n])
         s = np.diag(d)
         Trans = u[:, :n].dot(s[:n, :n])
-        print(Trans.shape)
+        # print(Trans.shape)
         return Trans, Trans_comp.T
     else:
         # covariance matrix
@@ -211,46 +204,75 @@ def PCA_np(features, n=2, svd=0):
 # comp is a matrix
 pca_svs, comp_svd = PCA_np(feature, 5, 1)
 pca_eig, comp = PCA_np(feature, 5)  # this one returns matrix
-# convert complex type to float, [n.real for n in np.asarray(comp)]
 # https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
-from PIL import Image
 from sklearn.decomposition import PCA
 pca = PCA(5)
 pca5 = pca.fit(feature)  # pca5.components_ 為(5, 92)應該是eigenvector
 c5 = pca.transform(feature)
 
-# PIL failed, value of array should between 0 and 255 for PIL
+# todo: PIL failed, value of array should between 0 and 255 for PIL
+from PIL import Image
 # img = Image.fromarray(pca5.components_[0].reshape(112, 92), mode='L')
 # img.save('./eigenface.png')
 # img.show()
 
-# worked, https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
-# plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))  # colorful one
-# plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92), cmap='gray')
-plt.imshow(comp_svd[0].reshape(112, 92), cmap='gray')  # for svd
-plt.xticks(())
-plt.yticks(())
-plt.show()
+
+def plot_eigenface(eig, color='gray'):
+    """
+    https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
+    :param eig:
+    :param color: 'gray' or none
+    """
+    if color:
+        plt.imshow(eig, cmap=color)
+    else:
+        plt.imshow(eig)
+    # remove coordination
+    plt.xticks(())
+    plt.yticks(())
+    plt.show()
+
+
+for i in range(comp_svd.shape[0]):
+    # convert complex type to float, [n.real for n in np.asarray(comp)
+    # plot_eigenface(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
+    plot_eigenface(comp_svd[i].reshape(112, 92))  # for svd
+
+
+def classify(w, x, classes):
+    softmaxes = []
+    for n in range(x.shape[0]):
+        s = np.float64(0.)
+        ak = w[k].T.dot(phi(x[n]))
+        for j in range(classes):
+            aj = w[j].T.dot(phi(x[n]))
+            s += np.nan_to_num(np.exp(aj - ak))
+        softmaxes += [1./s]
+    return softmaxes.index(max(softmaxes))
+
 
 # todo: train起來
-w = np.zeros((classes, len(phi(feature[0])), 1))
-cee = []
-acc = []
 dim = [2, 5, 10]
-# epoch
-for ep in range(20):
-    # pca_feature = PCA_np(feature, d, 1)
-    pca_feature = PCA(5).fit_transform(feature)
-    e = error(w, target, pca_feature)
-    cee += [np.reshape(e, 1)]
-    for k in range(classes):
-        # 2. 牛頓法
-        w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, target, pca_feature))
-    break
+for d in dim:
+    err = []
+    acc = []
+    pca_feature, pca_com = PCA_np(feature, d, 1)
+    # pca_feature = PCA(d).fit_transform(feature)
+    w = np.zeros((classes, len(phi(pca_feature[0])), 1))
+    # epoch
+    for ep in range(20):
+        e = error(w, target, pca_feature)
+        err += [np.reshape(e, 1)]
+        for k in range(classes):
+            # 2. 牛頓法
+            w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, target, pca_feature))
+        prediction = classify(w, pca_feature, classes)
+        # out = pca_feature.dot(w)
+        # prediction = softmax_result(out)
+        acc.append((prediction == target).all(axis=1).mean())
 
-
-A = np.array([[1, 2], [3, 4], [5, 6]])
-PCA_np(A, 1)
+    # plot_loss_acc(cee, 'Number Epochs', 'Loss')
+    plot_loss_acc(acc, 'Number Epochs', 'Accuracy')
 
 
 #%%
