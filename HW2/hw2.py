@@ -148,6 +148,27 @@ print((pred == y_test).all(axis=1).mean())
 print((-1/25)*cross_entropy(y_test, pred_score))
 
 
+def svd_flip(u, v, u_based_decision=True):
+    """Sign correction to ensure deterministic output from SVD.
+    Adjusts the columns of u and the rows of v such that the loadings in the
+    columns in u that are largest in absolute value are always positive.
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/extmath.py#L500
+    """
+    if u_based_decision:
+        # columns of u, rows of v
+        max_abs_cols = np.argmax(np.abs(u), axis=0)
+        signs = np.sign(u[max_abs_cols, range(u.shape[1])])
+        u *= signs
+        v *= signs[:, np.newaxis]
+    else:
+        # rows of v, columns of u
+        max_abs_rows = np.argmax(np.abs(v), axis=1)
+        signs = np.sign(v[range(v.shape[0]), max_abs_rows])
+        u *= signs
+        v *= signs[:, np.newaxis]
+    return u, v
+
+
 def PCA_np(features, n=2, svd=0):
     """
     :param features:
@@ -161,13 +182,17 @@ def PCA_np(features, n=2, svd=0):
     M = np.mean(features.T, axis=1)
     # center column
     C = features - M
-    # eigendecomposition, fixme: need to speed up by svd
+    # eigendecomposition
     if svd:
-        cov = np.cov(C)
-        u, d, v = np.linalg.svd(cov)
-        Trans = np.dot(features.T, u[:, :n])
-        eigenvector = v[:, :n]
-        return eigenvector, Trans.T
+        # svd will do on the data
+        # https://stats.stackexchange.com/questions/134282/relationship-between-svd-and-pca-how-to-use-svd-to-perform-pca
+        u, d, v = np.linalg.svd(C, full_matrices=False)  # It's not necessary to compute the full matrix of U or V
+        u, v = svd_flip(u, v)          # 處理正負號
+        Trans_comp = np.dot(features.T, u[:, :n])
+        s = np.diag(d)
+        Trans = u[:, :n].dot(s[:n, :n])
+        print(Trans.shape)
+        return Trans, Trans_comp.T
     else:
         # covariance matrix
         cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray
@@ -184,8 +209,8 @@ def PCA_np(features, n=2, svd=0):
 
 
 # comp is a matrix
-pca55, comp = PCA_np(feature, 5, 1)
-pca54, cc = PCA_np(feature, 5)  # this one returns matrix
+pca_svs, comp_svd = PCA_np(feature, 5, 1)
+pca_eig, comp = PCA_np(feature, 5)  # this one returns matrix
 # convert complex type to float, [n.real for n in np.asarray(comp)]
 # https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
 from PIL import Image
@@ -196,14 +221,13 @@ c5 = pca.transform(feature)
 
 # PIL failed, value of array should between 0 and 255 for PIL
 # img = Image.fromarray(pca5.components_[0].reshape(112, 92), mode='L')
-# img = Image.fromarray(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))
 # img.save('./eigenface.png')
 # img.show()
 
 # worked, https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
 # plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92))  # colorful one
 # plt.imshow(np.asarray([n.real for n in np.asarray(comp)[0]]).reshape(112, 92), cmap='gray')
-plt.imshow(comp[0].reshape(112, 92), cmap='gray')  # for svd
+plt.imshow(comp_svd[0].reshape(112, 92), cmap='gray')  # for svd
 plt.xticks(())
 plt.yticks(())
 plt.show()
@@ -215,7 +239,8 @@ acc = []
 dim = [2, 5, 10]
 # epoch
 for ep in range(20):
-    pca_feature = PCA_np(feature, 5, 1)
+    # pca_feature = PCA_np(feature, d, 1)
+    pca_feature = PCA(5).fit_transform(feature)
     e = error(w, target, pca_feature)
     cee += [np.reshape(e, 1)]
     for k in range(classes):
