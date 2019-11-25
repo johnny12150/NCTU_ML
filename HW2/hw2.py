@@ -116,9 +116,10 @@ for ep in range(1000):
     prob = softmax_result(score)
     m = x1.shape[0]
     # cross entropy
-    loss = (-1/ m) * cross_entropy(y1, prob)
+    loss = (1/ m) * cross_entropy(y1, prob)
     losses.append(loss)
     grad = (-1/ m) * np.dot(x1.T, (y1 - prob))
+    # grad = -np.dot(x1.T, (y1 - prob))
     w_1 -= lr*grad
 
 
@@ -139,7 +140,7 @@ pred = np.where(pred_score > 0.5, 1, 0)
 # all with axis= 1 will compare whether each row matches the answer
 print((pred == y_test).all(axis=1).mean())
 # test loss
-print((-1/25)*cross_entropy(y_test, pred_score))
+print((1/25)*cross_entropy(y_test, pred_score))
 
 
 def svd_flip(u, v, u_based_decision=True):
@@ -163,7 +164,7 @@ def svd_flip(u, v, u_based_decision=True):
     return u, v
 
 
-def PCA_np(features, n=2, svd=0):
+def PCA_np(features, n=2, svd=0, mean=1, test=0):
     """
     :param features:
     :param n:
@@ -180,16 +181,25 @@ def PCA_np(features, n=2, svd=0):
     if svd:
         # svd will do on the data
         # https://stats.stackexchange.com/questions/134282/relationship-between-svd-and-pca-how-to-use-svd-to-perform-pca
-        u, d, v = np.linalg.svd(C, full_matrices=False)  # It's not necessary to compute the full matrix of U or V
+        if mean:
+            u, d, v = np.linalg.svd(C, full_matrices=False)  # It's not necessary to compute the full matrix of U or V
+        else:
+            u, d, v = np.linalg.svd(features, full_matrices=False)
         u, v = svd_flip(u, v)  # 處理正負號(圖就會跟sklearn一致, 沒有就會跟np_eig一致)
         Trans_comp = np.dot(features.T, u[:, :n])
         s = np.diag(d)
         Trans = u[:, :n].dot(s[:n, :n])
         # print(Trans.shape)
-        return Trans, Trans_comp.T
+        if test:
+            return Trans, u[:, :n]
+        else:
+            return Trans, Trans_comp.T
     else:
         # covariance matrix
-        cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray
+        if mean:
+            cov = np.cov(C, rowvar=0)  # 求covariance matrix, return ndarray
+        else:
+            cov = np.cov(features, rowvar=0)
         eigenvalue, eigenvector = np.linalg.eig(np.mat(cov))
         sortEigValue = np.argsort(eigenvalue)  # sort eigenvalue
         topNvalue = sortEigValue[-1:-(n + 1):-1]  # select top n value
@@ -209,13 +219,8 @@ pca_eig, comp = PCA_np(feature, 5)  # this one returns matrix
 from sklearn.decomposition import PCA
 pca = PCA(5)
 pca5 = pca.fit(feature)  # pca5.components_ 為(5, 92)應該是eigenvector
+pca5_ = pca5.components_
 c5 = pca.transform(feature)
-
-# todo: PIL failed, value of array should between 0 and 255 for PIL
-from PIL import Image
-# img = Image.fromarray(pca5.components_[0].reshape(112, 92), mode='L')
-# img.save('./eigenface.png')
-# img.show()
 
 
 def plot_eigenface(eig, color='gray'):
@@ -240,7 +245,7 @@ for i in range(comp_svd.shape[0]):
     plot_eigenface(comp_svd[i].reshape(112, 92))  # for svd
 
 
-def classify(w, x, classes):
+def predicts(w, x, classes):
     softmaxes = []
     for k in range(classes):
         s = np.float64(0.)
@@ -268,7 +273,7 @@ for d in dim:
             w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, target, pca_feature))
         prediction = []
         for n in pca_feature:
-            prediction.append(classify(w, n, classes))
+            prediction.append(predicts(w, n, classes))
 
         # todo: use ohe label
         # acc.append((prediction == target).all(axis=1).mean())
@@ -334,7 +339,6 @@ for col in categorical_col:
     pokemon_ohe[col], uni = pokemon[col].factorize()
     uniques.append(uni.tolist())
 
-# todo: 測試分開train, test做normalize
 pokemon_norm = pokemon_ohe.copy()
 # normalize
 pokemon_norm = (pokemon_norm - pokemon_norm.mean()) / pokemon_norm.std()
@@ -358,14 +362,26 @@ plot_knn(acc, range(1, 11))
 dim = [7, 6, 5]
 for d in dim:
     acc = []
-    # fixme: 用原始照片, 每次帶一張做pca
-    pca_data, pca_vec = PCA_np(pokemon_norm.values, d)
+    pca = PCA(d)
+    # 用 train取得 eigenvector, test用 train的作 transform
+    # pca_data, pca_vec = PCA_np(pokemon_norm.values[:120], d, 0, 0)
+    # pca_test = np.asarray(pokemon_norm.values[120:]*pca_vec.T)
+    # below will return the same result as sklearn
+    pca_data_s, pca_vec_s = PCA_np(pokemon_ohe.drop(['Type 1'], axis=1).values[:120], d, 0, 1)
+    # 理論上test data要自己 normalize
+    pca_test_s = np.asarray(pokemon_norm.values[120:] * pca_vec_s.T)
+
+    # svd版, 畫出來的合理一些
+    pca_d, pca_u = PCA_np(pokemon_norm.values[:120], d, 1, 0)
+    pca_data = np.dot(pokemon_norm.values[:120], pca_u.T)
+    pca_test = np.dot(pokemon_norm.values[120:], pca_u.T)
+
     for k in range(1, 11):
         predictions = []
         #  compare each test sample with 120 training samples
         for j in range(38):
-            j = 120 + j
-            predictions.append(knn(pca_data[j], pca_data[:120], target[:120], k))
+            # predictions.append(knn(pca_test_s[j], pca_data_s[:120], target[:120], k))
+            predictions.append(knn(pca_test[j], pca_data[:120], target[:120], k))
         # 計算Acc
         acc.append(np.count_nonzero(predictions == target[120:]) / len(target[120:]))
 
