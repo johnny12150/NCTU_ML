@@ -46,6 +46,7 @@ for i in range(5):
     t_idx = list(set(np.arange(i*10, 10 + i*10)) - set(idx))
     t_idxs.extend(t_idx)
 
+# todo: train test做shuffle
 X_train = feature[idxs]
 y_train = target[idxs]
 X_test = feature[t_idxs]
@@ -216,11 +217,6 @@ def PCA_np(features, n=2, svd=0, mean=1, test=0):
 pca_svs, comp_svd = PCA_np(feature, 5, 1)
 pca_eig, comp = PCA_np(feature, 5)  # this one returns matrix
 # https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
-from sklearn.decomposition import PCA
-pca = PCA(5)
-pca5 = pca.fit(feature)  # pca5.components_ 為(5, 92)應該是eigenvector
-pca5_ = pca5.components_
-c5 = pca.transform(feature)
 
 
 def plot_eigenface(eig, color='gray'):
@@ -261,8 +257,8 @@ dim = [2, 5, 10]
 for d in dim:
     err = []
     acc = []
+    # fixme: 切 train/ test
     pca_feature, pca_com = PCA_np(feature, d, 1)
-    # pca_feature = PCA(d).fit_transform(feature)
     w = np.zeros((classes, len(phi(pca_feature[0])), 1))
     # epoch
     for ep in range(20):
@@ -362,7 +358,6 @@ plot_knn(acc, range(1, 11))
 dim = [7, 6, 5]
 for d in dim:
     acc = []
-    pca = PCA(d)
     # 用 train取得 eigenvector, test用 train的作 transform
     # pca_data, pca_vec = PCA_np(pokemon_norm.values[:120], d, 0, 0)
     # pca_test = np.asarray(pokemon_norm.values[120:]*pca_vec.T)
