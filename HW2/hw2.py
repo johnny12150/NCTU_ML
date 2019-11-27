@@ -46,19 +46,26 @@ for i in range(5):
     t_idx = list(set(np.arange(i*10, 10 + i*10)) - set(idx))
     t_idxs.extend(t_idx)
 
-# todo: train test做shuffle
 X_train = feature[idxs]
 y_train = target[idxs]
 X_test = feature[t_idxs]
 y_test = target[t_idxs]
+
+# random shuffle
+randomize = np.arange(25)
+np.random.shuffle(randomize)
+X_train = X_train[randomize]
+y_train = y_train[randomize]
+X_test = X_test[randomize]
+y_test = y_test[randomize]
 
 
 def phi(x):
     return x.reshape(len(x), 1)
 
 
-def cross_entropy(predict, target):
-    return -np.sum(predict * np.log(target))
+def cross_entropy(target, predict):
+    return -np.sum(target * np.log(predict))
 
 
 def softmax(n, k, w, X):  # 公式裡的y
@@ -105,7 +112,10 @@ def softmax_result(z):
 # 1. GD
 classes = 5
 w_1 = np.zeros([feature.shape[1], classes])
-losses = []
+tr_accuracy = []
+tr_losses = []
+te_accuracy = []
+te_losses = []
 lr = 1e-3
 x1 = X_train
 y1 = y_train
@@ -118,13 +128,23 @@ for ep in range(1000):
     m = x1.shape[0]
     # cross entropy
     loss = (1/ m) * cross_entropy(y1, prob)
-    losses.append(loss)
+    # record acc and loss
+    tr_losses.append(loss)
+    pred_score = softmax_result(np.dot(X_train, w_1))
+    pred = np.where(pred_score > 0.5, 1, 0)
+    tr_accuracy.append((pred == y_train).all(axis=1).mean())
+    # test on epoch
+    pred_score = softmax_result(np.dot(X_test, w_1))
+    pred = np.where(pred_score > 0.5, 1, 0)
+    te_losses.append((1/m)*cross_entropy(y_test, pred_score))
+    te_accuracy.append((pred == y_test).all(axis=1).mean())
+    # update weight
     grad = (-1/ m) * np.dot(x1.T, (y1 - prob))
-    # grad = -np.dot(x1.T, (y1 - prob))
     w_1 -= lr*grad
 
 
-def plot_loss_acc(record, x_axis, y_axis):
+def plot_loss_acc(record, x_axis, y_axis, tl='Train'):
+    plt.title(tl + '  ' + y_axis)
     plt.plot(record)
     plt.xlabel(x_axis)
     plt.ylabel(y_axis)
@@ -132,12 +152,18 @@ def plot_loss_acc(record, x_axis, y_axis):
 
 
 # plot GD train loss
-plot_loss_acc(losses, 'Number Epochs', 'Loss')
+plot_loss_acc(tr_losses, 'Number Epochs', 'Loss')
+# train acc
+plot_loss_acc(tr_accuracy, 'Number Epochs', 'Accuracy')
+
+# test acc
+plot_loss_acc(te_losses, 'Number Epochs', 'Loss', 'Test')
+# train acc
+plot_loss_acc(te_accuracy, 'Number Epochs', 'Accuracy', 'Test')
 
 # predict ohe class
 pred_score = softmax_result(np.dot(X_test, w_1))
 pred = np.where(pred_score > 0.5, 1, 0)
-# test acc
 # all with axis= 1 will compare whether each row matches the answer
 print((pred == y_test).all(axis=1).mean())
 # test loss
