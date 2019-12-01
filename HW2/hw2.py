@@ -68,7 +68,6 @@ for i in range(1, x.shape[0]):
         SNs.append(sn)
         # 第一種圖(Fig. 3.9)
         # plot data point
-        # plt.figure()
         plt.scatter(x[:i], t[:i], facecolor="none", edgecolor="b", label="training data")
         plt.legend()
         # sample five curve
@@ -77,13 +76,11 @@ for i in range(1, x.shape[0]):
         sortX = np.linspace(0, 2, 50)
         pred = predict(w_sampled, phi(sortX, M, 0).T)
         # plot five curve that we just sampled
+        plt.title('data size %d' % i)
         for j in range(5):
-            plt.title('data size %d' % i)
             plt.plot(sortX, pred[j], '-r')
         plt.show()
 
-        # clear the plot
-        # plt.figure()
         # 2.第二種圖(Fig. 3.8)predictive distribution
         mean, std = predictive_dist(sortX, M, mn, sn)
         plt.title('data size %d' % i)
@@ -94,7 +91,7 @@ for i in range(1, x.shape[0]):
         plt.show()
 
         # 3. Fig. 3.7
-        plt.figure()
+        plt.title('data size %d' % i)
         w0, w1 = np.meshgrid(np.linspace(0, 5, 100), np.linspace(-2, 3, 100))
         w_combined = np.array([w0, w1]).transpose(1, 2, 0)
         N_density = np.empty((100, 100))
@@ -136,7 +133,6 @@ pic_header = len(b'P5\n92 112\n255\n')
 for i, k in enumerate(files):
     # read pgm, https://stackoverflow.com/questions/7368739/numpy-and-16-bit-pgm
     pics[i] = np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width))
-    # pics[i] = mpimg.imread('./dataset/'+k)
 
 # normalize pics
 pics_norm = pics/ 255
@@ -257,6 +253,7 @@ def plot_loss_acc(record, x_axis, y_axis, tl='Train'):
     plt.plot(record)
     plt.xlabel(x_axis)
     plt.ylabel(y_axis)
+    plt.xticks(range(1, len(record)+1))
     plt.show()
 
 
@@ -350,7 +347,8 @@ def PCA_np(features, n=2, svd=0, mean=1, test=0):
 
 # comp is a matrix
 pca_svs, comp_svd = PCA_np(feature, 5, 1)
-pca_eig, comp = PCA_np(feature, 5)  # this one returns matrix
+# this one is too slow
+# pca_eig, comp = PCA_np(feature, 5)  # this one returns matrix
 # https://www.kaggle.com/arthurtok/interactive-intro-to-dimensionality-reduction
 
 
@@ -385,34 +383,47 @@ def predicts(w, x, classes):
             aj = w[j].T.dot(phi(x))
             s += np.nan_to_num(np.exp(aj - ak))
         softmaxes += [1./s]
-    return softmaxes.index(max(softmaxes))
+    return np.where(np.array(softmaxes).reshape(-1) > 1/ classes, 1, 0)
+    # 回傳預測的class
+    # return softmaxes.index(max(softmaxes))
 
 
 dim = [2, 5, 10]
 for d in dim:
     err = []
     acc = []
-    # fixme: 切 train/ test
-    pca_feature, pca_com = PCA_np(feature, d, 1)
+    t_err = []
+    t_acc = []
+    pca_feature, pca_com = PCA_np(X_train, d, 1)
     w = np.zeros((classes, len(phi(pca_feature[0])), 1))
     # epoch
-    for ep in range(20):
-        e = error(w, target, pca_feature)
+    for ep in range(10):
+        e = error(w, y_train, pca_feature)
         err += [np.reshape(e, 1)]
         for k in range(classes):
             # 2. 牛頓法
-            w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, target, pca_feature))
+            w[k] = w[k] - np.linalg.inv(hessian(w, k, pca_feature)).dot(gradient(w, k, y_train, pca_feature))
+        # make predictions base the training weight
         prediction = []
         for n in pca_feature:
             prediction.append(predicts(w, n, classes))
+        # use ohe label
+        acc.append((np.array(prediction) == y_train).all(axis=1).mean())
 
-        # todo: use ohe label
-        # acc.append((prediction == target).all(axis=1).mean())
-        prediction = [g+1 for g in prediction]
-        acc.append(np.count_nonzero(prediction == labels)/ len(labels))
+        # testing
+        e = error(w, y_test, pca_feature)
+        t_err += [np.reshape(e, 1)]
+        pca_feature, pca_com = PCA_np(X_test, d, 1)
+        prediction = []
+        for n in pca_feature:
+            prediction.append(predicts(w, n, classes))
+        t_acc.append((np.array(prediction) == y_test).all(axis=1).mean())
 
-    plot_loss_acc(err, 'Number Epochs', 'Loss')
-    plot_loss_acc(acc, 'Number Epochs', 'Accuracy')
+    plot_loss_acc(err, 'Number Epochs', 'Loss', 'Dim = '+str(d)+' Training')
+    plot_loss_acc(acc, 'Number Epochs', ' Accuracy', 'Dim = '+str(d)+' Training')
+
+    plot_loss_acc(t_err, 'Number Epochs', 'Loss', 'Dim = '+str(d)+' Testing')
+    plot_loss_acc(t_acc, 'Number Epochs', 'Accuracy', 'Dim = '+str(d)+' Testing')
 
 
 #%%
