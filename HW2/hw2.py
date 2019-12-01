@@ -4,9 +4,117 @@ import numpy as np
 import scipy.io as scio
 import matplotlib.pyplot as plt
 import zipfile
+import math
 # 第一題
 # load .mat file
 dataMat = scio.loadmat('./dataset/1_data.mat')
+x = dataMat['x']
+t = dataMat['t']
+
+M = 3
+
+
+def phi(x, m, trans=1):
+    X = []
+    for i in range(m):
+        # X += [sigmoid_basis(x,i, m)]
+        X.append(sigmoid_basis(x, i, m))
+    if trans:
+        return np.array(X).reshape(-1, m)
+    else:
+        return np.array(X)
+
+
+def sigmoid_basis(x, j, m, sigma=0.1):
+    muj = (2 * j) / m
+    a = (x - muj) / sigma
+    return 1 / (1 + np.exp(-a))
+
+
+def predictive_dist(x, M, mN, SN, beta=1):
+    phiX = phi(x, M, 0).T
+    mean = phiX.dot(mN)
+    covX = 1 / beta + np.sum(phiX.dot(SN).dot(phiX.T), axis=1)
+    std = np.sqrt(covX)
+    return mean, std
+
+
+def predict(w, x):
+    return w.dot(x.T)
+
+
+def gaussian_pdf(x, mean, sd):
+    # https://zh.wikipedia.org/wiki/%E5%A4%9A%E5%85%83%E6%AD%A3%E6%80%81%E5%88%86%E5%B8%83
+    y = 1 / (2 * np.pi) * 1 / np.sqrt(np.linalg.det(sd)) * np.exp( -0.5 * ((x - mean).T.dot(np.linalg.inv(sd))).dot((x - mean)))
+    return y
+
+s0_inv = (10 ** -6) * np.identity(M)  # S0
+m0 = 0
+beta = 1
+MNs = []
+SNs = []
+data_len = [5, 10, 30, 80]
+
+# 大PHI矩陣(裡面有許多小phi)
+PHI = phi(x[0], M)
+sn_inv = s0_inv + beta * PHI.T.dot(PHI)
+sn = np.linalg.inv(sn_inv)
+mn = sn.dot(beta * np.dot(PHI.T, t[0]))
+# 每次多拿到一筆資料來更新M, S
+for i in range(1, x.shape[0]):
+    # 存特定data筆數的mean跟std
+    if i in data_len:
+        MNs.append(mn)
+        SNs.append(sn)
+        # 第一種圖(Fig. 3.9)
+        # plot data point
+        # plt.figure()
+        plt.scatter(x[:i], t[:i], facecolor="none", edgecolor="b", label="training data")
+        plt.legend()
+        # sample five curve
+        w_sampled = np.random.multivariate_normal(mn, sn, size=5)  # same as scipy multivariate_normal
+        # sortX = np.array(sorted(x))
+        sortX = np.linspace(0, 2, 50)
+        pred = predict(w_sampled, phi(sortX, M, 0).T)
+        # plot five curve that we just sampled
+        for j in range(5):
+            plt.title('data size %d' % i)
+            plt.plot(sortX, pred[j], '-r')
+        plt.show()
+
+        # clear the plot
+        # plt.figure()
+        # 2.第二種圖(Fig. 3.8)predictive distribution
+        mean, std = predictive_dist(sortX, M, mn, sn)
+        plt.title('data size %d' % i)
+        plt.scatter(x[:i],t[:i], facecolor="none", edgecolor="b", label="training data")
+        plt.plot(sortX, mean, 'r', label='mean')
+        plt.fill_between(sortX.reshape(len(sortX)), mean - std, mean + std, alpha=0.5, color='orange', label='std')
+        plt.legend()
+        plt.show()
+
+        # 3. Fig. 3.7
+        plt.figure()
+        w0, w1 = np.meshgrid(np.linspace(0, 5, 100), np.linspace(-2, 3, 100))
+        w_combined = np.array([w0, w1]).transpose(1, 2, 0)
+        N_density = np.empty((100, 100))
+        for f in range(N_density.shape[0]):
+            for g in range(N_density.shape[1]):
+                # select weight
+                N_density[f, g] = gaussian_pdf(w_combined[f, g], mn_old[:2], np.linalg.inv(sn_inv_old)[:2, :2])
+        plt.xlabel('x1')
+        plt.ylabel('x2')
+        plt.contourf(w0[0], w1[:, 0], N_density)
+        plt.show()
+
+    # update M, S
+    PHI = np.vstack((PHI, phi(x[i], M)))
+    mn_old = mn
+    sn_inv_old = sn_inv
+    sn_inv = sn_inv + beta * PHI.T.dot(PHI)  # 計算Sn，且beta = 1
+    sn = np.linalg.inv(sn_inv)
+    # sn_inv跟mn要帶舊的
+    mn = sn.dot(sn_inv_old.dot(mn) + beta * PHI.T.dot(t[:i + 1]).reshape(-1, ))
 
 #%%
 # 第二題
@@ -68,9 +176,10 @@ def cross_entropy(target, predict):
     return -np.sum(target * np.log(predict))
 
 
-def softmax(n, k, w, X):  # 公式裡的y
+def compute_y(n, k, w, X):  # 公式裡的y
     s = np.float64(0.)
     ak = w[k].T.dot(phi(X[n]))
+    # target classes
     for j in range(5):
         aj = w[j].T.dot(phi(X[n]))
         s += np.nan_to_num(np.exp(aj - ak))
@@ -81,7 +190,7 @@ def softmax(n, k, w, X):  # 公式裡的y
 def gradient(w, k, t, X):
     output = np.zeros((len(w[0]), 1))
     for n in range(len(X)):
-        scale = softmax(n, k, w, X) - t[:, k][n]  # Ynk - Tnk
+        scale = compute_y(n, k, w, X) - t[:, k][n]  # Ynk - Tnk
         output += scale * phi(X[n])
     return output
 
@@ -90,7 +199,7 @@ def gradient(w, k, t, X):
 def hessian(w, k, X):
     output = np.zeros((len(w[0]), len(w[0])))
     for n in range(len(X)):
-        scale = softmax(n, k, w, X) * (1 - softmax(n, k, w, X))
+        scale = compute_y(n, k, w, X) * (1 - compute_y(n, k, w, X))
         output += scale * (phi(X[n]).dot(phi(X[n]).T))
     return output
 
@@ -100,7 +209,7 @@ def error(w, t, X):
     for n in range(len(X)):
         for k in range(5):
             if t[:, k][n] != 0.:
-                s += np.nan_to_num(np.log(softmax(n, k, w, X)))
+                s += np.nan_to_num(np.log(compute_y(n, k, w, X)))
     return -1*s
 
 
@@ -302,7 +411,7 @@ for d in dim:
         prediction = [g+1 for g in prediction]
         acc.append(np.count_nonzero(prediction == labels)/ len(labels))
 
-    # plot_loss_acc(cee, 'Number Epochs', 'Loss')
+    plot_loss_acc(err, 'Number Epochs', 'Loss')
     plot_loss_acc(acc, 'Number Epochs', 'Accuracy')
 
 
