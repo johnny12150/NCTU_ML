@@ -15,5 +15,3 @@ jobs:
       run: |
         echo Add other actions to build,
         echo test, and deploy your project.
-    - name: Mirror Repository
-      uses: spyoungtech/mirror-action@v0.1.1
