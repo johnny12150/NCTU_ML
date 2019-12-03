@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 import scipy.io as scio
 import matplotlib.pyplot as plt
-import zipfile
-import math
 # 第一題
 # load .mat file
 dataMat = scio.loadmat('./dataset/1_data.mat')
@@ -115,27 +113,47 @@ for i in range(1, x.shape[0]):
 
 #%%
 # 第二題
-# https://stackoverflow.com/questions/46588075/read-all-files-in-zip-archive-in-python
-# https://stackoverflow.com/questions/19371860/python-open-file-from-zip-without-temporary-extracting-it
-# load zip
-archive = zipfile.ZipFile('./dataset/Faces.zip', 'r')
-# export unzipped files
-# archive.extractall('./dataset/')
-# make dict for all pictures
-files = {name: archive.read(name) for name in archive.namelist() if name.endswith('.pgm')}
-# fixme: 如果解壓縮失敗，能夠自動讀取已經解壓縮的
-pic_height = 112
-pic_width = 92
-# load pics ti np array
-pics = np.zeros((50, pic_height, pic_width))
-labels = np.repeat(range(1, 6), 10)
-pic_header = len(b'P5\n92 112\n255\n')
-for i, k in enumerate(files):
-    # read pgm, https://stackoverflow.com/questions/7368739/numpy-and-16-bit-pgm
-    pics[i] = np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width))
+try:
+    import zipfile
+    # https://stackoverflow.com/questions/46588075/read-all-files-in-zip-archive-in-python
+    # https://stackoverflow.com/questions/19371860/python-open-file-from-zip-without-temporary-extracting-it
+    # load zip
+    archive = zipfile.ZipFile('./dataset/Faces.zip', 'r')
+    # export unzipped files
+    # archive.extractall('./dataset/')
+    # make dict for all pictures
+    files = {name: archive.read(name) for name in archive.namelist() if name.endswith('.pgm')}
+    pic_height = 112
+    pic_width = 92
+    # load pics ti np array
+    pics = np.zeros((50, pic_height, pic_width))
+    labels = np.repeat(range(1, 6), 10)
+    pic_header = len(b'P5\n92 112\n255\n')
+    for i, k in enumerate(files):
+        # read pgm, https://stackoverflow.com/questions/7368739/numpy-and-16-bit-pgm
+        pics[i] = np.frombuffer(files[k], dtype='u1', count=pic_width*pic_height, offset=pic_header).reshape((pic_height, pic_width))
+except:
+    import glob
+    pic_height = 112
+    pic_width = 92
+    pic_header = len(b'P5\n92 112\n255\n')
+    labels = np.repeat(range(1, 6), 10)
+    pics = np.zeros((50, pic_height, pic_width))
+
+    # 如果解壓縮失敗，能夠自動讀取已經解壓縮的
+    def read_pgm(filename, byteorder='>'):
+        with open(filename, 'rb') as f:
+            buffer = f.read()
+            return np.frombuffer(buffer, dtype='u1', count=pic_width * pic_height, offset=pic_header).reshape((pic_height, pic_width))
+
+    img_count = 0
+    for folder in glob.glob("./dataset/Faces/*"):
+        for img in glob.glob(folder + '/*.pgm'):
+            pics[img_count] = read_pgm(img)
+            img_count += 1
 
 # normalize pics
-pics_norm = pics/ 255
+pics_norm = pics / 255
 feature = pics_norm.reshape(50, -1)  # picture flatten
 target = pd.get_dummies(labels).values  # ohe target
 
@@ -248,24 +266,23 @@ for ep in range(1000):
     w_1 -= lr*grad
 
 
-def plot_loss_acc(record, x_axis, y_axis, tl='Train'):
+def plot_loss_acc(record, x_axis, y_axis, tl='Train', xrange=1):
     plt.title(tl + '  ' + y_axis)
     plt.plot(record)
     plt.xlabel(x_axis)
     plt.ylabel(y_axis)
-    plt.xticks(range(1, len(record)+1))
+    if xrange:
+        plt.xticks(range(1, len(record)+1))
     plt.show()
 
 
 # plot GD train loss
-plot_loss_acc(tr_losses, 'Number Epochs', 'Loss')
-# train acc
-plot_loss_acc(tr_accuracy, 'Number Epochs', 'Accuracy')
+plot_loss_acc(tr_losses, 'Number Epochs', 'Loss', 'Train', 0)
+plot_loss_acc(tr_accuracy, 'Number Epochs', 'Accuracy', 'Train', 0)
 
-# test acc
-plot_loss_acc(te_losses, 'Number Epochs', 'Loss', 'Test')
-# train acc
-plot_loss_acc(te_accuracy, 'Number Epochs', 'Accuracy', 'Test')
+# test
+plot_loss_acc(te_losses, 'Number Epochs', 'Loss', 'Test', 0)
+plot_loss_acc(te_accuracy, 'Number Epochs', 'Accuracy', 'Test', 0)
 
 # predict ohe class
 pred_score = softmax_result(np.dot(X_test, w_1))
