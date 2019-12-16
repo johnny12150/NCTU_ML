@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 from scipy.io import loadmat
 
 
-plot_pos = {0:(0, 0), 1:(0, 1), 2:(1, 0), 3:(1, 1)}
-
-
 def exp_quad_kernel(x, y, params):
     return params[0]*np.exp(-0.5*params[1]*np.subtract.outer(x, y)**2) + params[2] + params[3]*np.multiply.outer(x, y)
 
@@ -38,7 +35,7 @@ f, axarr = plt.subplots(2, 2)
 # table = PrettyTable(["parameters", "train error", "test error"])
 
 
-def plot_gp(y1, y2):
+def plot_gp(y1, y2, p):
     plt.plot(x, y, 'r-')
     plt.fill_between(x, y1, y2, facecolor='pink', edgecolor='none')
     plt.scatter(train_x, train_t, facecolors='none', edgecolors='b')  # plot the data point
@@ -47,11 +44,11 @@ def plot_gp(y1, y2):
     plt.ylim(-10, 15)
     plt.xlabel('x')
     plt.ylabel('t', rotation=0)
+    plt.savefig('./images/gp_param' + str(p) + '.png')
     plt.show()
 
 
 for p in range(4):
-    pos = plot_pos[p]
     C_inv = np.linalg.inv(exp_quad_kernel(train_x, train_x, parameters[p]) + beta_inv * np.identity(60))
 
     # plot the distribution
@@ -63,17 +60,8 @@ for p in range(4):
         y1[i] = y[i] + std
         y2[i] = y[i] - std
 
-    # plot_gp(y1, y2)
-    axarr[pos].plot(x, y, 'r-')
-    axarr[pos].fill_between(x, y1, y2, facecolor='pink', edgecolor='none')
-    axarr[pos].scatter(train_x, train_t, facecolors='none', edgecolors='b')
-    axarr[pos].set_title(str(parameters[p]))
-    axarr[pos].set_xlim(0, 2)
-    axarr[pos].set_ylim(-10, 15)
-    axarr[pos].set_xlabel('x')
-    axarr[pos].set_ylabel('t', rotation=0)
+    plot_gp(y1, y2, p)
 
-    # calculate the rms on test data
     train_y = np.empty(60)
     for i in range(60):
         k = exp_quad_kernel(train_x, train_x[i], parameters[p])
@@ -89,4 +77,4 @@ for p in range(4):
     # table.add_row(["{"+str(parameters[p])[1:-1]+"}", RMSE(train_y, train_t), RMSE(predict, test_t)])
 
 # print table
-plt.show()
+
