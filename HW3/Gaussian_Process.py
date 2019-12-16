@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 
@@ -11,11 +12,10 @@ def RMSE(x, y):
     return np.sqrt(np.sum((x-y)**2)/len(x))
 
 
+# load data
 data = loadmat('./data/gp.mat')
 X = data['x'].squeeze()
 T = data['t'].squeeze()
-beta_inv = 1
-
 train_x = X[:60]
 test_x = X[60:]
 train_t = T[:60]
@@ -26,15 +26,23 @@ y = np.empty(300)
 y1 = np.empty(300)
 y2 = np.empty(300)
 
+# set param
 parameters = [[1, 4, 0, 0],
               [0, 0, 0, 1],
               [1, 4, 0, 5],
               [1, 32, 5, 5]]
-
-f, axarr = plt.subplots(2, 2)
-# table = PrettyTable(["parameters", "train error", "test error"])
+beta_inv = 1
 
 
+# use df to print
+def print_table(t1, t2, t3):
+    return pd.DataFrame(columns=[t1, t2, t3])
+
+
+table = print_table("param", "training error", "testing error")
+
+
+# draw the predictive distribution plot
 def plot_gp(y1, y2, p):
     plt.plot(x, y, 'r-')
     plt.fill_between(x, y1, y2, facecolor='pink', edgecolor='none')
@@ -48,6 +56,7 @@ def plot_gp(y1, y2, p):
     plt.show()
 
 
+# iterate throw 4 set of paramaters
 for p in range(4):
     C_inv = np.linalg.inv(exp_quad_kernel(train_x, train_x, parameters[p]) + beta_inv * np.identity(60))
 
@@ -74,7 +83,10 @@ for p in range(4):
         c = exp_quad_kernel(test_x[i], test_x[i], parameters[p])
         predict[i] = np.linalg.multi_dot([k, C_inv, train_t])
 
-    # table.add_row(["{"+str(parameters[p])[1:-1]+"}", RMSE(train_y, train_t), RMSE(predict, test_t)])
+    # add error to the table
+    table = table.append(pd.Series(["("+str(parameters[p])[1:-1]+")", RMSE(train_y, train_t), RMSE(predict, test_t)], index=["param", "training error", "testing error"]), ignore_index=True)
 
-# print table
+print(table.to_string(index=False))
+
+# todo: 加上ARD
 
