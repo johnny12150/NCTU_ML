@@ -104,9 +104,9 @@ class SVM:
         return prediction
 
     def plot(self, X, t, xx, yy, prediction):
-        class0_indexes = np.where(t == 1)
-        class1_indexes = np.where(t == 2)
-        class2_indexes = np.where(t == 3)
+        class0_indexes = np.where(t == 0)
+        class1_indexes = np.where(t == 1)
+        class2_indexes = np.where(t == 2)
         plt.scatter(X[self.sv_index, 0], X[self.sv_index, 1], facecolors='none', edgecolors='k', linewidths=2,
                     label="support vector")
         plt.scatter(X[class0_indexes][:, 0], X[class0_indexes][:, 1], c='r', marker='x', label="class 0")
