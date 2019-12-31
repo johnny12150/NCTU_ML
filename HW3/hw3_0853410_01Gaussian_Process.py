@@ -5,7 +5,6 @@ from scipy.io import loadmat
 
 
 def exp_quad_kernel(x, y, params):
-    # fixme: 自己重寫
     return params[0]*np.exp(-0.5*params[1]*np.subtract.outer(x, y)**2) + params[2] + params[3]*np.multiply.outer(x, y)
 
 
@@ -62,7 +61,7 @@ def GP(table, pars, C_inv, p=-1, iter=300):
     for i in range(iter):
         k = exp_quad_kernel(train_x, x[i], pars[p])
         c = exp_quad_kernel(x[i], x[i], pars[p]) + beta_inv
-        y[i] = np.linalg.multi_dot([k, C_inv, train_t])
+        y[i] = np.linalg.multi_dot([k, C_inv, train_t])  # mean
         std = np.sqrt(c - np.linalg.multi_dot([k.T, C_inv, k]))
         y1[i] = y[i] + std
         y2[i] = y[i] - std

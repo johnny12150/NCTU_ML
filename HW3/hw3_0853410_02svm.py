@@ -208,23 +208,22 @@ X, comp_svd = PCA_np(X, 2, 1)
 # normalize
 X = (X - X.mean()) / X.std()
 
-# fixme: one-versus-rest實作
-# 以下都是用 one-versus-one
+# one-versus-one, one-versus-all可以自己調
 # 1. linear kernel
-svm_model = custom_svm(X, y)
+svm_model = custom_svm(X, y, vs='ovr')  # 'ovo'跟'ovr'的差異看不太出來
 weight_dict, bias_dict = train_svm(X, classes, svm_model.support_, np.abs(svm_model.dual_coef_))
 xx, yy = make_meshgrid(X[:, 0], X[:, 1])
 prediction = make_prediction(np.column_stack((xx.flatten(), yy.flatten())), classes, weight_dict, bias_dict)
 svm_plot(svm_model.support_, X, y, xx, yy, np.array(prediction).reshape(xx.shape))
-plt.savefig('./images/svm_ovo_linearKernel.png')
+# plt.savefig('./images/svm_ovo_linearKernel.png')
 plt.show()
 
 # 2. polynomial kernel
 svm_poly_model = custom_svm(X, y, type_='poly')
 weight_dict, bias_dict = train_svm(X, classes, svm_poly_model.support_, np.abs(svm_poly_model.dual_coef_), type_='poly')
-xx, yy = make_meshgrid(X[:, 0], X[:, 1])
+# xx, yy = make_meshgrid(X[:, 0], X[:, 1])
 prediction = make_prediction(np.column_stack((xx.flatten(), yy.flatten())), classes, weight_dict, bias_dict, 'poly')
 svm_plot(svm_poly_model.support_, X, y, xx, yy, np.array(prediction).reshape(xx.shape))
-plt.savefig('./images/svm_ovo_polyKernel.png')
+# plt.savefig('./images/svm_ovo_polyKernel.png')
 plt.show()
 
