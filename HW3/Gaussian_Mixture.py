@@ -2,33 +2,7 @@ import numpy as np
 from PIL import Image
 from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
-
-
-# fixme: 自己重寫
-class K_means:
-    def __init__(self, K=2):
-        self.K = K
-        self.max_iteration = 300
-        self.eye = np.eye(K)
-
-    def initialize(self, data):
-        self.mu = data[np.random.choice(len(data), self.K, replace=False)]
-        self.rnk = np.ones([len(data), self.K])
-
-    def minimize_J(self, data):
-        for it in range(self.max_iteration):
-            # pixels*"1"*RGB - K*RGB -> pixels*K*RGB -> pixels*K
-            dists = np.sum((data[:, None] - self.mu) ** 2, axis=2)
-            # pixels -> pixels*K
-            rnk = self.eye[np.argmin(dists, axis=1)]
-
-            if np.array_equal(rnk, self.rnk):
-                break
-            else:
-                self.rnk = rnk
-
-            # 分子： pixels*K*RGB -> K*RGB, 分母：K,1
-            self.mu = np.sum(rnk[:, :, None] * data[:, None], axis=0) / np.sum(rnk, axis=0)[:, None]
+import pandas as pd
 
 
 class GMM:
@@ -91,26 +65,51 @@ class GMM:
         # plt.show()
 
 
-# def print_RGB_table(model, _type):
-#     tb = pt.PrettyTable()
-#     tb.add_column(_type, [k for k in range(model.K)])
-#     tb.add_column('R', [r for r in (model.mu[:, 0] * 255).astype(int)])
-#     tb.add_column('G', [g for g in (model.mu[:, 1] * 255).astype(int)])
-#     tb.add_column('B', [b for b in (model.mu[:, 2] * 255).astype(int)])
-#     print("======= K = %d (%s) =======" % (k, _type))
-#     print(tb)
-#     print()
+def kmeans_init(K=2):
+    mu = data[np.random.choice(len(data), K, replace=False)]
+    rnk = np.ones([len(data), K])
+    matrixI = np.eye(K)
+    return mu, rnk, matrixI
 
 
-def generate_img(model, _type):
+def kmeans_loss(mu, rnk, identity, iter=300):
+    for it in range(iter):
+        # pixels*"1"*RGB - K*RGB -> pixels*K*RGB -> pixels*K
+        dists = np.sum((data[:, None] - mu) ** 2, axis=2)
+        # pixels -> pixels*K
+        rnk = identity[np.argmin(dists, axis=1)]
+
+        if np.array_equal(rnk, rnk):
+            break
+        else:
+            rnk = rnk
+
+        # 分子： pixels*K*RGB -> K*RGB, 分母：K,1
+        mu = np.sum(rnk[:, :, None] * data[:, None], axis=0) / np.sum(rnk, axis=0)[:, None]
+    return mu, rnk
+
+
+def generate_img(mu, rnk, _type):
     if _type == 'K_means':
-        new_data = (model.mu[np.where(k_means.rnk == 1)[1]] * 255).astype(int)
+        new_data = (mu[np.where(rnk == 1)[1]] * 255).astype(int)
     else:
-        new_data = (model.mu[np.argmax(model.gaussians, axis=0)] * 255).astype(int)
+        new_data = (mu[np.argmax(model.gaussians, axis=0)] * 255).astype(int)
 
     disp = Image.fromarray(new_data.reshape(height, width, depth).astype('uint8'))
-    # disp.show(title=_type)
+    disp.show(title=_type)
     disp.save('./images/' + _type + str(k) + '.png')
+
+
+# use df to print
+def print_table(type_, mu, k):
+    print("======= K = %d (%s) =======" % (k, type_))
+    t1 = [i for i in range(k)]
+    t2 = [r for r in (mu[:, 0] * 255).astype(int)]
+    t3 = [g for g in (mu[:, 1] * 255).astype(int)]
+    t4 = [b for b in (mu[:, 2] * 255).astype(int)]
+    d = {type_: t1, 'R': t2, 'G': t3, 'B':t4}
+    print(pd.DataFrame(d).to_string(index=False))
+
 
 img = Image.open('./data/hw3_3.jpeg')
 img.load()
@@ -121,17 +120,16 @@ data = np.reshape(data, (-1, depth))  # pixels*RGB  (width*height) = pixels
 K_list = [3, 5, 7, 10]
 
 for k in K_list:
-    k_means = K_means(K=k)
-    k_means.initialize(data)
-    k_means.minimize_J(data)
+    muK, rnk, I = kmeans_init(k)
+    updated_muK, updated_rnk = kmeans_loss(muK, rnk, I)
 
-    # print_RGB_table(k_means, 'K_means')
-    generate_img(k_means, 'K_means')
+    print_table('K_means', updated_muK, k)  # show the table of estimated muK
+    generate_img(updated_muK, updated_rnk, 'K_means')
 
-    gmm = GMM(k)
-    gmm.initialize(k_means.rnk, k_means.mu, data)
-    gmm.EM(data)
-    gmm.plot_likelihood_log()
-
-    # print_RGB_table(gmm, 'GMM')
-    generate_img(gmm, 'GMM')
+    # gmm = GMM(k)
+    # gmm.initialize(k_means.rnk, k_means.mu, data)
+    # gmm.EM(data)
+    # gmm.plot_likelihood_log()
+    #
+    # # print_RGB_table(gmm, 'GMM')
+    # generate_img(gmm, 'GMM')
